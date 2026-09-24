@@ -56,17 +56,17 @@ with col_text:
 
     st.markdown("""
 
-        QUPEX is a lightweight app to explore **molecular structures**, **geometries**, and **chemical space** properties.
+        QUPEX is a lightweight app to explore the high-dimensional space defined by **quantum-mechanical properties** of molecular systems. 
 
         It converts **HDF5** data into fast **Parquet indexes** and provides:
-        - Molecular & conformer statistics  
+        - Molecular & conformational analysis  
         - 2D/3D molecular visualization 
-        - Property-space exploration 
+        - Property space exploration 
         - Molecular clustering 
         
-        Additionally, the app includes an optional **machine‑learning** module for dipole‑moment prediction.
+        Additionally, the QUPEX includes an optional **machine learning** module for the prediction of scalar dipole moment.
 
-        *Note: The input dataset must follow a data structure similar to **QM7‑X**, as described in Hoja et al. (2021), available at [Zenodo](https://zenodo.org/records/4288677).*       
+        *Note: The input dataset must follow a data structure similar to **QM7‑X** dataset files, which are available at [Zenodo](https://zenodo.org/records/4288677).*       
     """)
 
 # ============================================================

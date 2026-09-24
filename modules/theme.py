@@ -939,7 +939,7 @@ def render_footer():
         </div>
 
         <div class="app-footer-meta">
-            © 2026 · Scientific visualization and machine-learning application
+            © 2026 · Mirtha Pillaca
         </div>
 
         <div class="app-footer-links">

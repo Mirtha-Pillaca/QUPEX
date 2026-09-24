@@ -1,6 +1,6 @@
 # QUPEX — QUantum Property EXplorer
 
-An interactive [Streamlit](https://streamlit.io) application for exploring the **QM7-X** quantum-chemistry dataset (Hoja et al., *Scientific Data* 8, 43, 2021) and running a machine-learning surrogate model over it.
+An interactive [Streamlit](https://streamlit.io) application for the exploration, visualization, statistical analysis, and machine-learning-based prediction of molecular properties, built around the **QM7-X** quantum-chemistry dataset. 
 
 QUPEX turns a QM7-X-format HDF5 file into lightweight, cached Parquet indexes and exposes four analysis pages on top of them: dataset composition and geometry statistics, 2D/3D molecular structure visualization with property correlations, PCA/t-SNE chemical-space analysis with Gaussian-Mixture clustering, and a pretrained XGBoost model for dipole-moment prediction with SHAP-based interpretability.
 
@@ -20,7 +20,7 @@ QUPEX turns a QM7-X-format HDF5 file into lightweight, cached Parquet indexes an
 
 ## Features
 
-- **Dataset Overview** — dataset-wide summary statistics, elemental/molecular composition, geometry counts, the geometry-identifier hierarchy (Molecule → Isomer → Configuration → Geometry), and a curated QM7-X property reference table.
+- **Dataset Overview** — dataset-wide summary statistics, elemental/molecular composition, geometry counts, the geometry-identifier hierarchy (Molecule → Isomer → Configuration → Conformer), and a curated QM7-X property reference table.
 - **Property Space Analysis** — property-distribution and property-correlation views over the indexed scalar properties (with a Molecules/Conformers scope toggle), a correlation-matrix heatmap, and pairwise property relationships paired with a per-molecule 2D (RDKit) + 3D ([py3Dmol](https://pypi.org/project/py3Dmol/)) structure viewer and atomic-level analysis.
 - **Molecular Clustering** — PCA and t-SNE dimensionality reduction over a user-selected subset of QM7-X scalar properties (Molecules or Conformers scope), with Gaussian Mixture Model clustering, silhouette-based cluster-quality evaluation, and a PCA-vs-t-SNE cluster-agreement comparison.
 - **Machine Learning** — loads a pretrained scikit-learn `Pipeline` (`StandardScaler` + `XGBRegressor`) that predicts dipole moment from a 40-feature tight-binding/DFTB-style descriptor set, reports held-out validation metrics, provides SHAP `TreeExplainer` interpretability, and accepts new HDF5/CSV data for inference.
@@ -31,7 +31,7 @@ QUPEX turns a QM7-X-format HDF5 file into lightweight, cached Parquet indexes an
 ## Screenshot
 
 <p align="center">
-  <img src="assets/screenshot.png" alt="Landing page of the application" width="500">
+  <img src="assets/screenshot.png" alt="Landing page of the application" width="700">
   <br>
   <em>Figure 1. Landing page of the application, featuring the default‑dataset option and the three supported data‑loading modes: Local file, Upload, and Zenodo.</em>
 </p>
@@ -44,7 +44,7 @@ Requires Python 3.10+ (developed against Python 3.10). The steps below assume [C
 1. **Clone the repository:**
 
    ```bash
-   git clone <this-repository-url>
+   git clone https://github.com/Mirtha-Pillaca/QUPEX
    cd QUPEX
    ```
 

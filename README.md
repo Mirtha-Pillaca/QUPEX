@@ -1,4 +1,4 @@
-# QUPEX — Quantum Property EXplorer
+# QUPEX — QUantum Property EXplorer
 
 An interactive [Streamlit](https://streamlit.io) application for exploring the **QM7-X** quantum-chemistry dataset (Hoja et al., *Scientific Data* 8, 43, 2021) and running a machine-learning surrogate model over it.
 

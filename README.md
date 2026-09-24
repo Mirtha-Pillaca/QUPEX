@@ -1,12 +1,13 @@
-# QUPEX — QUantum Property EXplorer
+# QUPEX
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![Streamlit](https://img.shields.io/badge/Streamlit-App-red)](https://streamlit.io/)
 [![Zenodo](https://img.shields.io/badge/Data-Zenodo-blue)](https://zenodo.org/)
 
-An interactive [Streamlit](https://streamlit.io) application for the exploration, visualization, statistical analysis, and machine-learning-based prediction of molecular properties, built around the **QM7-X** quantum-chemistry dataset. 
+QUPEX — **QUantum Property EXplorer** — is an interactive [Streamlit](https://streamlit.io) application for the exploration, visualization, statistical analysis, and machine-learning-based prediction of dipole moments, built around the **QM7-X** quantum-chemistry dataset.
 
-QUPEX turns a QM7-X-format HDF5 file into lightweight, cached Parquet indexes and exposes four analysis pages on top of them: dataset composition and geometry statistics, 2D/3D molecular structure visualization with property correlations, PCA/t-SNE chemical-space analysis with Gaussian-Mixture clustering, and a pretrained XGBoost model for dipole-moment prediction with SHAP-based interpretability.
+QUPEX converts QM7-X-format HDF5 files into lightweight, cached Parquet indexes and provides four analysis pages covering dataset composition and geometry statistics, 2D/3D molecular structure visualization and property correlations, PCA/t-SNE chemical-space analysis with Gaussian-Mixture clustering, and dipole-moment prediction using a pretrained XGBoost model with SHAP-based interpretability.
 
 ## Contents
 
@@ -257,7 +258,8 @@ Please cite the original QM7-X publication when using this dataset in derived wo
 
 ## License
 
-*(Add a license file and state it here — e.g. MIT, Apache-2.0 — before making the repository public. No license is currently declared.)*
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
 
 ## Citation
 

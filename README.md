@@ -29,7 +29,12 @@ QUPEX turns a QM7-X-format HDF5 file into lightweight, cached Parquet indexes an
 
 ## Screenshot
 
-*(Add a screenshot of the running app here, e.g. `assets/screenshot.png`.)*
+<p align="center">
+  <img src="assets/screenshot.png" alt="Landing page of the application" width="500">
+  <br>
+  <em>Figure 1. Landing page of the application, featuring the default‑dataset option and the three supported data‑loading modes: Local file, Upload, and Zenodo.</em>
+</p>
+
 
 ## Installation
 

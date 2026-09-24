@@ -1,0 +1,25 @@
+# Local datasets and downloaded ML artifacts
+data/*
+!data/.gitkeep
+
+models/*
+!models/.gitkeep
+
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Streamlit / editor / OS
+.DS_Store
+.vscode/
+
+# Python environments
+hdf5_env/
+.venv/
+venv/
+env/

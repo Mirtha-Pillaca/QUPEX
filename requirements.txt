@@ -1,0 +1,25 @@
+# Core application 
+streamlit>=1.38
+h5py>=3.11
+numpy>=1.26
+pandas>=2.2
+pyarrow>=16.0
+scipy>=1.11
+Pillow>=10.0
+
+# Plotting
+plotly>=5.22
+kaleido>=0.2.1
+matplotlib>=3.8
+
+# Cheminformatics / molecular visualization
+rdkit>=2023.9.6
+py3Dmol>=2.1
+
+# Machine learning 
+scikit-learn>=1.4
+xgboost>=2.0
+shap>=0.44
+
+# Remote dataset loading (Zenodo)
+requests>=2.31

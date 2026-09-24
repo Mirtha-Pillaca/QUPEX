@@ -5,7 +5,7 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-App-red)](https://streamlit.io/)
 [![Zenodo](https://img.shields.io/badge/Data-Zenodo-blue)](https://zenodo.org/)
 
-QUPEX — **QUantum Property EXplorer** — is an interactive [Streamlit](https://streamlit.io) application for the exploration, visualization, and statistical analysis of the high-dimensional space defined by the quantum-mechanical properties of molecular systems. Moreover, it provides access to a **machine learning** model for the prediction of dipole moments based on electronic descriptors. As a proof-of-concept, QUPEX has been built around the **QM7-X** dataset of small drug-like molecules. However, it can de used for investigating other molecular datasets. 
+QUPEX — **QUantum Property EXplorer** — is an interactive [Streamlit](https://streamlit.io) application for the exploration, visualization, and statistical analysis of the high-dimensional space defined by the quantum-mechanical properties of molecular systems. Moreover, it provides access to a **machine learning** model for the prediction of dipole moments based on electronic descriptors. As a proof-of-concept, QUPEX has been built around the **QM7-X** dataset of small drug-like molecules. However, it can be used for investigating other molecular datasets. 
 
 QUPEX converts QM7-X HDF5 dataset files into lightweight, cached Parquet indexes and provides four analysis pages covering dataset composition and conformational analysis, 2D/3D molecular visualization, property correlations evaluation, PCA/t-SNE property analysis with Gaussian-Mixture clustering, and dipole moment prediction using a pretrained XGBoost model with SHAP-based interpretability.
 
@@ -14,8 +14,8 @@ QUPEX converts QM7-X HDF5 dataset files into lightweight, cached Parquet indexes
 - [Features](#features)
 - [Screenshot](#screenshot)
 - [Installation](#installation)
-- [Running the app](#running-the-app)
-- [Testing the machine-learning prediction functionality](#testing-the-machine-learning-prediction-functionality)
+- [Running app](#running-app)
+- [Testing ML prediction functionality](#testing-ml-prediction-functionality)
 - [Data sources](#data-sources)
 - [Caching](#caching)
 - [Project structure](#project-structure)
@@ -104,7 +104,7 @@ then continue from step 4.
    **Note for macOS users:** The application automatically handles a potential OpenMP compatibility issue that can occur when multiple versions of `libomp.dylib` are loaded by Conda, `scikit-learn`, and `xgboost`. No additional action is required from the user.
 
    
-## Running the app
+## Running app
 
 7. Start the application from the repository root, with the Conda environment activated:
 
@@ -154,7 +154,7 @@ If a download fails, for example because there is no network connection, the aff
 
      Then open the URL displayed by Streamlit in your browser.
 
-## Testing the machine-learning prediction functionality
+## Testing ML prediction functionality
 
 A ready-to-use sample file, [`test_dftb_dipole_dataset.csv`](test_dftb_dipole_dataset.csv), is included in the repository root so the dipole-moment prediction workflow can be tried out without preparing your own descriptor data.
 

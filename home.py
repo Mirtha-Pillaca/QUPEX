@@ -59,9 +59,10 @@ with col_text:
         QUPEX is a lightweight app to explore **molecular structures**, **geometries**, and **chemical space** properties.
 
         It converts **HDF5** data into fast **Parquet indexes** and provides:
-        - Molecular & geometric statistics  
+        - Molecular & conformer statistics  
         - 2D/3D molecular visualization 
-        - Chemical-space exploration  
+        - Property-space exploration 
+        - Molecular clustering 
         
         Additionally, the app includes an optional **machine‑learning** module for dipole‑moment prediction.
 
@@ -412,9 +413,8 @@ with c1:
 
             <div style=" height:1px; background:#E5E7EB; margin:0.2rem 0 0.85rem 0; "></div>
 
-            <div style=" font-size:0.86rem; color:#6B7280; line-height:1.55; min-height:67px; ">
-                Composition, geometries, elements, and
-                fundamental dataset statistics.
+            <div style=" font-size:0.86rem; color:#6B7280; line-height:1.55; min-height:87px; ">
+                Compositional profiles, conformer and molecular distribution patterns, and core statistical characteristics of the dataset.
             </div>
             """,
             unsafe_allow_html=True,
@@ -423,7 +423,7 @@ with c1:
         st.page_link( "pages/1_Dataset_Overview.py", label="Explore dataset →", width="stretch", )
 
 # ============================================================
-# 2. MOLECULAR ANALYSIS
+# 2. PROPERTY SPACE ANALYSIS
 # ============================================================
 
 with c2:
@@ -439,7 +439,7 @@ with c2:
 
             <div>
             <div style=" font-size:1.02rem; font-weight:700; color:#111827; line-height:1.2; ">
-                    Molecular Analysis
+                    Property Space Analysis
                     </div>
 
             <div style=" font-size:0.72rem; color:#7C3AED; font-weight:600; margin-top:0.2rem; ">
@@ -451,18 +451,18 @@ with c2:
 
             <div style=" height:1px; background:#E5E7EB; margin:0.2rem 0 0.85rem 0; "></div>
 
-            <div style=" font-size:0.86rem; color:#6B7280; line-height:1.55; min-height:67px; ">
-                Investigate molecular structures,
-                descriptors, and computed physicochemical properties.
+            <div style=" font-size:0.86rem; color:#6B7280; line-height:1.55; min-height:87px; ">
+                Combines quantum‑property correlation analysis with interactive 2D/3D molecular visualization and atom‑level details.
+            
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        st.page_link( "pages/2_Molecular_Properties.py", label="Explore molecules →", width="stretch", )
+        st.page_link( "pages/2_Property_Space_Analysis.py", label="Explore properties →", width="stretch", )
 
 # ============================================================
-# 3. CHEMICAL SPACE
+# 3. MOLECULAR CLUSTERING
 # ============================================================
 
 with c3:
@@ -478,11 +478,11 @@ with c3:
 
             <div>
             <div style=" font-size:1.02rem; font-weight:700; color:#111827; line-height:1.2; ">
-                Chemical Space
+                Molecular Clustering
                 </div>
 
             <div style=" font-size:0.72rem; color:#2563EB; font-weight:600; margin-top:0.2rem; ">
-                    STRUCTURE &amp; SIMILARITY
+                    CLUSTER ANALYSIS
                 </div>
             </div>
 
@@ -490,14 +490,14 @@ with c3:
 
             <div style=" height:1px; background:#E5E7EB; margin:0.2rem 0 0.85rem 0; "></div>
 
-            <div style=" font-size:0.86rem; color:#6B7280; line-height:1.55; min-height:67px; ">
-                Explore descriptors, 2D and 3D visualizations, and clustering patterns.
+            <div style=" font-size:0.86rem; color:#6B7280; line-height:1.55; min-height:87px; ">
+                Maps chemical space with PCA and t‑SNE, fitting independent GMMs on each 2D projection to identify molecular clusters.
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        st.page_link( "pages/3_Chemical_Space_Analysis.py", label="Explore chemical space →", width="stretch", )
+        st.page_link( "pages/3_Molecular_Clustering.py", label="Explore clusters →", width="stretch", )
 
 # ============================================================
 # 4. MACHINE LEARNING
@@ -527,8 +527,8 @@ with c4:
             </div>
             <div style=" height:1px; background:#E5E7EB; margin:0.2rem 0 0.85rem 0; "></div>
 
-            <div style=" font-size:0.86rem; color:#6B7280; line-height:1.55; min-height:67px; ">
-                Predicts dipole moments with validated XGBoost models.
+            <div style=" font-size:0.86rem; color:#6B7280; line-height:1.55; min-height:87px; ">
+                Evaluates the trained QUED‑XGBoost model and deploys it for dipole‑moment prediction on new molecular inputs.
             </div>
             """,
             unsafe_allow_html=True,

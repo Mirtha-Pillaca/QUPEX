@@ -145,6 +145,10 @@ with col_main:
         These files are not stored in the GitHub repository. The model is downloaded the first time the
         Machine Learning page is opened; the training and test sets are downloaded only when validation
         is run. Every file is cached locally afterwards and is not downloaded again on subsequent runs.
+
+        A separate sample file, `test_dftb_dipole_dataset.csv`, ships in the repository root. It
+        contains the 40 required descriptor columns and can be uploaded directly on the "New-data
+        prediction" tab to try the prediction workflow without preparing your own data.
         """
     )
 
@@ -160,10 +164,12 @@ with col_main:
         2. Load a dataset — use the default QM7-X dataset, or select Local, Upload, or Zenodo.
         3. Explore dataset composition and geometry statistics on **Dataset Overview**.
         4. Inspect property distributions, correlations, and pairwise relationships on
-          **Molecular Properties**.
+          **Property Space Analysis**.
         5. Visualize individual molecules in 2D/3D from the same page.
-        6. Explore chemical space (PCA / t-SNE / clustering) on **Chemical Space Analysis**.
-        7. Use **Machine Learning** for dipole-moment prediction and model evaluation.
+        6. Explore chemical space (PCA / t-SNE / GMM clustering) on **Molecular Clustering**.
+        7. Use **Machine Learning** for dipole-moment prediction and model evaluation — a
+          sample CSV (`test_dftb_dipole_dataset.csv`, in the repository root) is available
+          to try the "New-data prediction" tab without preparing your own descriptor data.
         8. Return to this **Documentation** page for references and data information at any time.
         """
     )
@@ -194,8 +200,8 @@ with col_main:
 
     st.markdown(
         """
-        A citation for the QUPEX application itself is in preparation (see the "Data source" panel in
-        the sidebar) and will be added here once finalized.
+        A citation for the QUPEX application itself is in preparation (see the "Reference" link in
+        the page footer) and will be added here once finalized.
         """
     )
 

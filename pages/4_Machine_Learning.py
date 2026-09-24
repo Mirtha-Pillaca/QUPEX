@@ -108,8 +108,6 @@ def _panel_download_row(fig, base_filename, key_prefix):
 
 st.title("Machine Learning")
 
-# st.caption( "Validate the trained QUED-XGBoost model and use it to predict molecular dipole moments on new datasets." )
-
 st.write( "Evaluates the trained QUED‑XGBoost model and deploys it for dipole‑moment prediction on new molecular inputs." )
 
 # ============================================================

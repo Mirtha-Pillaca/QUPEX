@@ -31,7 +31,7 @@ apply_global_theme()
 # ============================================================
 
 st.title("Dataset Exploration")
-st.write("Composition, geometries, elemental distribution, and core dataset statistics.")
+st.write("Composition, conformers, elemental distribution, and core dataset statistics.")
 
 # ============================================================
 # CHECK DATASET
@@ -287,7 +287,7 @@ with tab_overview:
         st.metric( "Molecules", f"{n_molecules:,}", )
 
     with col2:
-        st.metric( "Total geometries", f"{geometry_stats['total_geometries']:,}", help="Includes conformers and alternative molecular geometries.", )
+        st.metric( "Total conformers", f"{geometry_stats['total_geometries']:,}",  )
 
     with col3:
         st.metric( "Elements", ", ".join(elements), )
@@ -299,7 +299,7 @@ with tab_overview:
     # ANALYSIS SECTION
     # ========================================================
 
-    section_header("Molecular and Geometry Size Distribution")
+    section_header("Molecular Size Distribution")
 
 
     dark_mode = False
@@ -366,14 +366,14 @@ with tab_overview:
                 st.caption( "PNG export requires Kaleido." )
 
             # ========================================================
-            # Geometry figure for download
+            # Conformer figure for download
             # ========================================================
 
             structure_fig = plot_size_distribution(
                 structure_all,
                 structure_without_H,
                 structure_means,
-                "Geometries · "
+                "Conformers · "
                 f"{geometry_stats['total_geometries']:,}",
                 "structure",
                 size_mode,
@@ -388,7 +388,7 @@ with tab_overview:
                 structure_png = structure_fig.to_image( format="png", scale=2, )
 
                 st.download_button(
-                    label="↓ Geometries PNG",
+                    label="↓ Conformers PNG",
                     data=structure_png,
                     file_name="geometry_size_distribution.png",
                     mime="image/png",
@@ -430,7 +430,6 @@ with tab_overview:
 
                 st.caption( "Elements found: " + ", ".join(elements) )
 
-
         # ============================================================
         # Structures
         # ============================================================
@@ -441,7 +440,7 @@ with tab_overview:
                 structure_all,
                 structure_without_H,
                 structure_means,
-                "Geometries · "
+                "Conformers · "
                 f"{geometry_stats['total_geometries']:,}",
                 "structure",
                 size_mode,
@@ -496,15 +495,14 @@ with tab_molecular:
 
         st.caption(
             "Choose whether the summary metrics and charts below "
-            "describe unique molecules or every geometry record "
-            "(including conformers)."
+            "describe unique molecules or every conformer record. "
         )
 
     with col_scope_control:
 
         analysis_scope = st.segmented_control(
             "Analysis scope",
-            options=[ "Molecules", "Geometries", ],
+            options=[ "Molecules", "Conformers", ],
             default="Molecules",
             key="composition_analysis_scope",
             label_visibility="collapsed",
@@ -520,7 +518,7 @@ with tab_molecular:
 
     opt_has_composition_columns = required_opt_columns.issubset( set(opt_df.columns) )
 
-    if analysis_scope == "Geometries" and opt_has_composition_columns:
+    if analysis_scope == "Conformers" and opt_has_composition_columns:
 
         composition_cache_key_geometry = ( f"{dataset_id}_composition_geometry" )
 
@@ -566,10 +564,10 @@ with tab_molecular:
 
     else:
 
-        if analysis_scope == "Geometries":
+        if analysis_scope == "Conformers":
 
             st.info(
-                "Geometry-level elemental/formula composition "
+                "Conformer-level elemental/formula composition "
                 "requires composition columns in the optimized "
                 "index. Rebuild the dataset index to enable it. "
                 "Showing molecule-level composition instead."
@@ -612,7 +610,7 @@ with tab_molecular:
             help=(
                 "Summed across every geometry record "
                 "(including conformers)."
-                if analysis_scope == "Geometries"
+                if analysis_scope == "Conformers"
                 else "Summed across unique molecules."
             ),
         )
@@ -629,17 +627,17 @@ with tab_molecular:
 
     with col4:
 
-        if analysis_scope == "Geometries":
+        if analysis_scope == "Conformers":
 
             # "Molecules with multiple geometries" 
             st.metric(
-                "Avg. geometries / molecule",
+                "Avg. conformers / molecule",
                 f"{geometry_stats['average_geometries']:.1f}",
                 help=(
                     "\"Molecules with multiple geometries\" is a "
-                    "molecule-level concept and has no geometry-"
+                    "molecule-level concept and has no conformer-"
                     "level equivalent -- showing the average number "
-                    "of geometry records per molecule instead."
+                    "of conformer records per molecule instead."
                 ),
             )
 
@@ -661,6 +659,7 @@ with tab_molecular:
     with col1:
 
         section_header( f"Elemental composition &middot; {analysis_scope}" )
+        
 
         element_counts = active_composition_stats["element_counts"]
 
@@ -856,15 +855,15 @@ with tab_molecular:
         # Prepare distribution
         # --------------------------------------------------------
 
-        geometry_count_df = ( pd.Series(geometry_counts) .value_counts() .sort_index() .rename_axis("Geometries per molecule") .reset_index(name="Molecules") )
+        geometry_count_df = ( pd.Series(geometry_counts) .value_counts() .sort_index() .rename_axis("Conformers per molecule") .reset_index(name="Molecules") )
 
-        geometry_count_df["Geometry records"] = ( geometry_count_df["Geometries per molecule"] * geometry_count_df["Molecules"] )
+        geometry_count_df["Conformer records"] = ( geometry_count_df["Conformers per molecule"] * geometry_count_df["Molecules"] )
 
-        if analysis_scope == "Geometries":
+        if analysis_scope == "Conformers":
 
-            distribution_y_column = "Geometry records"
-            distribution_y_title = "Number of geometry records"
-            distribution_hover_label = "Geometry records"
+            distribution_y_column = "Conformer records"
+            distribution_y_title = "Number of conformer records"
+            distribution_hover_label = "Conformer records"
 
         else:
 
@@ -878,9 +877,9 @@ with tab_molecular:
 
         fig_distribution = px.bar(
             geometry_count_df,
-            x="Geometries per molecule",
+            x="Conformers per molecule",
             y=distribution_y_column,
-            labels={ "Geometries per molecule": "Geometries per molecule", distribution_y_column: distribution_y_title, },
+            labels={ "Conformers per molecule": "Conformers per molecule", distribution_y_column: distribution_y_title, },
         )
 
         # --------------------------------------------------------
@@ -902,7 +901,7 @@ with tab_molecular:
         # X-axis
         # --------------------------------------------------------
 
-        max_geometries = geometry_count_df["Geometries per molecule"].max()
+        max_geometries = geometry_count_df["Conformers per molecule"].max()
 
         fig_distribution.update_xaxes( tickmode="linear", dtick=5, range=[0.5, max_geometries + 0.5], )
 
@@ -918,20 +917,21 @@ with tab_molecular:
 
         st.plotly_chart( fig_distribution, width='stretch', key="geometry_count_distribution", )
 
-        if analysis_scope == "Geometries":
+        if analysis_scope == "Conformers":
 
             st.caption(
-                "Distribution of geometry records grouped by how "
-                "many total geometries their parent molecule has. "
+                "Distribution of conformer records grouped by how "
+                "many total conformers their parent molecule has. "
                 "Exact values are available by hovering over each bar."
             )
 
         else:
 
-            st.caption( "Distribution of molecules by the number of associated geometry records. Exact values are available by hovering over each bar." )
+            st.caption( "Distribution of molecules by the number of associated conformer records. Exact values are available by hovering over each bar." )
     else:
 
-        st.info( "No geometry-count information is available." )
+        st.info( "No conformer-count information is available." )
+
 # ========================================================
 # 4. GEOMETRY IDENTIFIER STRUCTURE
 # ========================================================
@@ -940,24 +940,24 @@ with tab_molecular:
 
     if geometry_id_counts:
 
-        if { "molecule_token", "isomer_token", "configuration_token", }.issubset(geometry_df.columns): parsed_geometry_df = geometry_df[ [ "geometry_id", "is_opt", "molecule_token", "isomer_token", "configuration_token", ] ].rename( columns={ "geometry_id": "Geometry ID", "is_opt": "Optimized", "molecule_token": "Molecule", "isomer_token": "Isomer", "configuration_token": "Configuration", } )
+        if { "molecule_token", "isomer_token", "configuration_token", }.issubset(geometry_df.columns): parsed_geometry_df = geometry_df[ [ "geometry_id", "is_opt", "molecule_token", "isomer_token", "configuration_token", ] ].rename( columns={ "geometry_id": "Conformer ID", "is_opt": "Optimized", "molecule_token": "Molecule", "isomer_token": "Isomer", "configuration_token": "Configuration", } )
         else:
 
             parsed = geometry_df["geometry_id"].apply(classify_geometry_id)
 
-            parsed_geometry_df = pd.DataFrame( { "Geometry ID": geometry_df["geometry_id"], "Optimized": geometry_df["is_opt"], "Molecule": parsed.apply(lambda p: p["molecule_token"]), "Isomer": parsed.apply(lambda p: p["isomer_token"]), "Configuration": parsed.apply( lambda p: p["configuration_token"] ), } )
+            parsed_geometry_df = pd.DataFrame( { "Conformer ID": geometry_df["geometry_id"], "Optimized": geometry_df["is_opt"], "Molecule": parsed.apply(lambda p: p["molecule_token"]), "Isomer": parsed.apply(lambda p: p["isomer_token"]), "Configuration": parsed.apply( lambda p: p["configuration_token"] ), } )
 
-        parsed_geometry_df["Occurrences"] = ( parsed_geometry_df["Geometry ID"].map( parsed_geometry_df["Geometry ID"].value_counts() ) )
+        parsed_geometry_df["Occurrences"] = ( parsed_geometry_df["Conformer ID"].map( parsed_geometry_df["Conformer ID"].value_counts() ) )
 
         if not parsed_geometry_df.empty:
 
-            configuration_df = ( parsed_geometry_df["Configuration"] .dropna() .value_counts() .rename_axis("Configuration") .reset_index(name="Geometry IDs") )
+            configuration_df = ( parsed_geometry_df["Configuration"] .dropna() .value_counts() .rename_axis("Configuration") .reset_index(name="Conformer IDs") )
 
         # ------------------------------------------------------------
         # ISOMER
         # ------------------------------------------------------------
 
-            isomer_df = ( parsed_geometry_df["Isomer"] .dropna() .value_counts() .rename_axis("Isomer") .reset_index(name="Geometry IDs") )
+            isomer_df = ( parsed_geometry_df["Isomer"] .dropna() .value_counts() .rename_axis("Isomer") .reset_index(name="Conformer IDs") )
 
     # ============================================================
     # IDENTIFIER PREVIEW
@@ -988,6 +988,99 @@ with tab_molecular:
         else:
 
             st.info( "No molecular formula data is available for this dataset." )
+
+
+    with st.expander("ℹ️ About this analysis", expanded=False):
+
+        st.markdown( """ This analysis describes the structure of the geometry identifiers used in the QM7-X dataset. """ )
+
+        # ========================================================
+        # GEOMETRY IDENTIFIER STRUCTURE
+        # ========================================================
+
+        st.markdown("#### Conformer identifier structure based in QM7X dataset")
+
+        st.code( "Geom-m1-i1-c1-opt", language="text", )
+
+        st.markdown(
+            """
+            Each conformer identifier is composed of several tokens:
+
+            - **`m1`** → molecule identifier
+            - **`i1`** → isomer identifier
+            - **`c1`** → configuration identifier
+            - **`opt`** → optimized conformer
+            """
+        )
+
+        st.caption(
+            "`-opt` indicates that the geometry is classified as optimized. "
+            "The absence of this suffix indicates a non-optimized conformer."
+        )
+
+        # ========================================================
+        # IDENTIFIER STATISTICS
+        # ========================================================
+
+        st.markdown("#### Identifier statistics")
+
+        unique_molecules = ( parsed_geometry_df["Molecule"] .dropna() .nunique() )
+
+        unique_isomers = ( parsed_geometry_df["Isomer"] .dropna() .nunique() )
+
+        unique_configurations = ( parsed_geometry_df["Configuration"] .dropna() .nunique() )
+
+        unique_geometry_ids = ( parsed_geometry_df["Conformer ID"] .dropna() .nunique() )
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric( "Molecule identifiers", f"{unique_molecules:,}", )
+
+        with col2:
+            st.metric( "Isomer identifiers", f"{unique_isomers:,}", )
+
+        with col3:
+            st.metric( "Configuration identifiers", f"{unique_configurations:,}", )
+
+        with col4:
+            st.metric( "Unique geometry IDs", f"{unique_geometry_ids:,}", )
+
+        # ========================================================
+        # INTERPRETATION
+        # ========================================================
+
+        st.markdown("#### Interpretation")
+
+        st.markdown(
+            """
+            The identifier hierarchy can therefore be interpreted as:
+
+            **Molecule → Isomer → Configuration → Conformer**
+
+            A molecule may contain multiple isomers, and an isomer may
+            contain multiple configurations. Each conformer record
+            corresponds to a specific combination of these identifiers.
+
+            The identifier-based analysis describes how records are
+            organized in the dataset. It does **not** by itself classify
+            molecular shape or physical state.
+            """
+        )
+
+        st.info(
+            """
+            Molecular shape classifications such as linear, planar,
+            bent, or tetrahedral require the actual atomic coordinates
+            and are therefore outside the scope of this identifier-based
+            analysis.
+            """
+        )
+
+
+
+
+
 
 # ============================================================
 # TAB — PROPERTIES

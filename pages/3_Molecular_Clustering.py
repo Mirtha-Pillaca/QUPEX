@@ -44,7 +44,7 @@ apply_global_theme()
 # TITLE
 # ============================================================
 
-st.title("Chemical Space Analysis")
+st.title("Molecular Clustering")
 
 st.write("Explores chemical-space structure through PCA and t-SNE dimensionality reduction. A Gaussian Mixture Model (GMM) is fitted independently to each resulting 2D projection to identify molecular clusters.")
 
@@ -77,11 +77,24 @@ dataset_id = (
 # ANALYSIS DATASET
 # ============================================================
 
-df = st.session_state.get("opt_index")
+clustering_analysis_scope = st.session_state.get( "clustering_analysis_scope", "Molecules", )
+
+if clustering_analysis_scope is None:
+    clustering_analysis_scope = "Molecules"
+
+if clustering_analysis_scope == "Conformers":
+
+    df = st.session_state.get("geometry_index")
+    scope_unit_label = "conformers"
+
+else:
+
+    df = st.session_state.get("opt_index")
+    scope_unit_label = "molecules"
 
 if df is None or df.empty:
 
-    st.warning( "The molecule-level analysis index is empty or unavailable for the active dataset." )
+    st.warning( f"The {scope_unit_label} analysis index is empty or unavailable for the active dataset." )
 
     st.stop()
 
@@ -167,30 +180,6 @@ def prepare_data(df, properties, color_by_properties):
     """
     Extract the selected numeric descriptors for the *complete*
     active dataset (no sampling of any kind).
-
-    `properties` drive the actual PCA/t-SNE input matrix `X`, and
-    which rows survive cleaning (a molecule missing any of these is
-    dropped). `color_by_properties` (the full "Color by" option
-    list -- every available numeric property, per item 11, not just
-    the ones currently selected for analysis) are ALSO carried
-    through as extra columns so a molecule can still be colored by
-    a property that isn't part of the current analysis selection --
-    but never affect which rows are dropped: a molecule missing one
-    of these gets a NaN there (renders uncolored for that option)
-    rather than being excluded from the analysis for a property it
-    was never asked to be analyzed with.
-
-    Returns
-    -------
-    data : DataFrame
-        Cleaned analysis rows (molecule_id + n_atoms if present +
-        every color-by property + the selected properties).
-    X : ndarray
-        Numeric descriptor matrix, one row per molecule.
-    molecule_ids : ndarray
-    properties : list
-        The properties actually used (== `properties`, echoed back
-        for convenience).
     """
 
     properties = list(properties)
@@ -251,7 +240,7 @@ except Exception as exc:
 
 if len(X) < 10:
 
-    st.error( "Not enough valid molecules remain after cleaning." )
+    st.error( f"Not enough valid {scope_unit_label} remain after cleaning." )
 
     st.stop()
 
@@ -290,12 +279,6 @@ def calculate_pca(X_scaled):
 def calculate_tsne_full( X_scaled, perplexity, random_state, ):
     """
     Two-dimensional t-SNE projection of the *complete* dataset.
-
-    Returns (coordinates, runtime_seconds). Runtime is measured
-    inside the cached function and returned as part of the cached
-    result -- so it still reports the real, original computation
-    time on a cache hit, instead of the near-zero time a cache
-    lookup itself takes.
     """
 
     n_samples = len( X_scaled, )
@@ -340,7 +323,7 @@ def calculate_tsne_full( X_scaled, perplexity, random_state, ):
 
 
 with st.spinner(
-    f"Running t-SNE on all {len(X_scaled):,} molecules "
+    f"Running t-SNE on all {len(X_scaled):,} {scope_unit_label} "
     "(this is a one-time cost per configuration -- cached "
     "afterward; no sampling is used)..."
 ):
@@ -467,13 +450,13 @@ tsne_gmm_bic = tsne_gmm_model.bic(X_tsne)
 # ============================================================
 
 def property_name(prop):
-    """Human-readable property name."""
+    """Readable property name."""
 
     return PROPERTY_INFO.get( prop, {}, ).get( "name", prop, )
 
 
 def color_label(value):
-    """Human-readable label for a 'Color by' selection."""
+    """Readable label for a 'Color by' selection."""
 
     if value == "Cluster":
         return "GMM Cluster"
@@ -678,7 +661,28 @@ def build_projection_figure( plot_df, x_col, y_col, x_title, y_title, gmm_model,
 
 tab_chemical_analysis = st.tabs( ["🧩 PCA vs t-SNE (GMM)"] )[0]
 
+
+
 with tab_chemical_analysis:
+
+    col_scope_info, col_scope_control = st.columns( [3, 1], gap="medium", )
+
+    with col_scope_info:
+
+        st.caption(
+            "Choose whether the chemical-space analysis below "
+            "describes unique molecules or every conformer record."
+        )
+
+    with col_scope_control:
+
+        st.segmented_control(
+            "Analysis scope",
+            options=[ "Molecules", "Conformers", ],
+            default="Molecules",
+            key="clustering_analysis_scope",
+            label_visibility="collapsed",
+        )
 
     # ============================================================
     # TOP-LEVEL SUMMARY METRICS
@@ -688,7 +692,7 @@ with tab_chemical_analysis:
 
     with metric_col1:
 
-        st.metric( "Molecules analyzed", f"{len(analysis_data):,}", help=( "Every valid molecule in the active dataset for the " "properties selected below -- never a sample or subset." ), )
+        st.metric( f"{scope_unit_label.capitalize()} analyzed", f"{len(analysis_data):,}", help=( f"Every valid {scope_unit_label[:-1]} in the active dataset for the " "properties selected below -- never a sample or subset." ), )
 
     with metric_col2:
 
@@ -888,7 +892,7 @@ with tab_chemical_analysis:
             st.dataframe( pca_variance_df, width='stretch', hide_index=True, )
 
             st.caption(
-                f"{len(analysis_data):,} molecules analyzed · "
+                f"{len(analysis_data):,} {scope_unit_label} analyzed · "
                 f"{len(selected_properties)} properties reduced to "
                 "2 PCA dimensions for this plot."
             )
@@ -1133,7 +1137,7 @@ with tab_chemical_analysis:
 
             tsne_params_df = pd.DataFrame(
                 {
-                    "Parameter": [ "Perplexity", "Learning rate", "Iterations (max)", "Random seed", "Molecules analyzed", "Runtime", ],
+                    "Parameter": [ "Perplexity", "Learning rate", "Iterations (max)", "Random seed", f"{scope_unit_label.capitalize()} analyzed", "Runtime", ],
                     "Value": [ f"{tsne_perplexity}", "auto", f"{TSNE_MAX_ITER}", f"{tsne_seed}", f"{len(analysis_data):,}", f"{tsne_runtime_seconds:.1f}s", ],
                 }
             )
@@ -1194,7 +1198,7 @@ with tab_chemical_analysis:
 
     comparison_table = pd.DataFrame(
         {
-            "Metric": [ "Molecules analyzed", "Selected properties", "Projection dimensions", "GMM components", "Silhouette", "AIC", "BIC", ],
+            "Metric": [ f"{scope_unit_label.capitalize()} analyzed", "Selected properties", "Projection dimensions", "GMM components", "Silhouette", "AIC", "BIC", ],
             "PCA": [ f"{len(analysis_data):,}", f"{len(selected_properties)}", "2", f"{pca_gmm_components}", ( "—" if np.isnan(pca_gmm_silhouette) else f"{pca_gmm_silhouette:.3f}" ), f"{pca_gmm_aic:,.0f}", f"{pca_gmm_bic:,.0f}", ],
             "t-SNE": [ f"{len(analysis_data):,}", f"{len(selected_properties)}", "2", f"{tsne_gmm_components}", ( "—" if np.isnan(tsne_gmm_silhouette) else f"{tsne_gmm_silhouette:.3f}" ), f"{tsne_gmm_aic:,.0f}", f"{tsne_gmm_bic:,.0f}", ],
         }

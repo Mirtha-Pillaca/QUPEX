@@ -951,7 +951,7 @@ def render_footer():
                 Reference
             </a>
             <span>·</span>
-            <a href="" target="_blank">
+            <a href="https://github.com/Mirtha-Pillaca/QUPEX" target="_blank">
                 Source code
             </a>
             </div>

@@ -91,15 +91,14 @@ with tab_distribution:
 
         st.caption(
             "Choose whether the property distribution below "
-            "describes unique molecules or every geometry record "
-            "(including conformers)."
+            "describes unique molecules or every conformer record."
         )
 
     with col_scope_control:
 
         distribution_analysis_scope = st.segmented_control(
             "Analysis scope",
-            options=[ "Molecules", "Geometries", ],
+            options=[ "Molecules", "Conformers", ],
             default="Molecules",
             key="property_distribution_scope",
             label_visibility="collapsed",
@@ -109,15 +108,15 @@ with tab_distribution:
         distribution_analysis_scope = "Molecules"
 
 
-    if distribution_analysis_scope == "Geometries":
+    if distribution_analysis_scope == "Conformers":
 
         # `CHECK REQUIRED DATA` 
         scope_df = st.session_state.get("geometry_index")
 
-        scope_unit_label = "geometries"
-        scope_unit_label_singular = "geometry"
+        scope_unit_label = "conformers"
+        scope_unit_label_singular = "conformer"
         scope_id_column = "geometry_id"
-        scope_id_header = "Geometry ID"
+        scope_id_header = "Conformer ID"
 
     else:
 
@@ -126,7 +125,7 @@ with tab_distribution:
         scope_unit_label = "molecules"
         scope_unit_label_singular = "molecule"
         scope_id_column = "molecule_id"
-        scope_id_header = "QM7-X Molecule ID"
+        scope_id_header = "Molecule ID"
 
     # ============================================================
     # CHECK REQUIRED DATA
@@ -327,13 +326,43 @@ with tab_matrix_correlation:
     # CORRELATION MATRIX
     # ============================================================
 
+    col_corr_scope_info, col_corr_scope_control = st.columns( [3, 1], gap="medium", )
+
+    with col_corr_scope_info:
+
+        st.caption(
+            "Choose whether the correlation matrix below "
+            "describes unique molecules or every conformer record."
+        )
+
+    with col_corr_scope_control:
+
+        correlation_analysis_scope = st.segmented_control(
+            "Analysis scope",
+            options=[ "Molecules", "Conformers", ],
+            default="Molecules",
+            key="correlation_matrix_scope",
+            label_visibility="collapsed",
+        )
+
+    if correlation_analysis_scope is None:
+        correlation_analysis_scope = "Molecules"
+
+    if correlation_analysis_scope == "Conformers":
+
+        correlation_scope_df = st.session_state.get("geometry_index")
+
+    else:
+
+        correlation_scope_df = df
+
+    correlation_scope_properties = [ property_key for property_key in PROPERTY_INFO if correlation_scope_df is not None and property_key in correlation_scope_df.columns ]
+
     correlation_properties = st.multiselect(
         "Properties to include in correlation matrix:",
-        options=available_properties,
-        default=available_properties,
-        format_func=lambda x: (
-            f"{PROPERTY_INFO[x].get('name', x)} ({x})"
-        ),
+        options=correlation_scope_properties,
+        default=correlation_scope_properties,
+        format_func=lambda x: ( f"{PROPERTY_INFO[x].get('name', x)} ({x})" ),
         key="distribution_correlation_properties",
     )
 
@@ -354,7 +383,7 @@ with tab_matrix_correlation:
         # Prepare correlation data
         # --------------------------------------------------------
 
-        correlation_df = df[ correlation_properties ].copy()
+        correlation_df = correlation_scope_df[ correlation_properties ].copy()
 
         for column in correlation_properties:
             correlation_df[column] = pd.to_numeric( correlation_df[column], errors="coerce", )
@@ -459,17 +488,6 @@ with tab_matrix_correlation:
 
         st.plotly_chart( correlation_fig, width='stretch', key="distribution_correlation_matrix", )
 
-        # --------------------------------------------------------
-        # Top 5 table
-        # --------------------------------------------------------
-        section_header("Strongest property correlations")  
-
-        st.dataframe( top_5_correlations, width='stretch', hide_index=True, )
-
-        # --------------------------------------------------------
-        # Interpretation
-        # --------------------------------------------------------
-
         st.caption(
             f"{correlation_method.capitalize()} correlation coefficient "
             "ranges from −1 (perfect negative correlation) "
@@ -482,7 +500,6 @@ with tab_matrix_correlation:
         # --------------------------------------------------------
 
         correlation_csv = ( correlation_matrix .to_csv() .encode("utf-8") )
-
         st.download_button(
             label="Download correlation matrix",
             data=correlation_csv,
@@ -491,10 +508,51 @@ with tab_matrix_correlation:
             key="download_correlation_matrix",
         )
 
+        # --------------------------------------------------------
+        # Top 5 table
+        # --------------------------------------------------------
+        section_header("Strongest property correlations")  
+
+        st.dataframe( top_5_correlations, width='stretch', hide_index=True, )
+
+
+
 with tab_pairwise:
 
     # st.subheader("Pairwise correlation & Molecular Structure")
     st.caption("Explore relationships and correlations between molecular properties and their structural characteristics.")
+
+    col_pw_scope_info, col_pw_scope_control = st.columns( [3, 1], gap="medium", )
+
+    with col_pw_scope_info:
+
+        st.caption(
+            "Choose whether the relationships below "
+            "describe unique molecules or every conformer record."
+        )
+
+    with col_pw_scope_control:
+
+        pairwise_analysis_scope = st.segmented_control(
+            "Analysis scope",
+            options=[ "Molecules", "Conformers", ],
+            default="Molecules",
+            key="pairwise_analysis_scope",
+            label_visibility="collapsed",
+        )
+
+    if pairwise_analysis_scope is None:
+        pairwise_analysis_scope = "Molecules"
+
+    if pairwise_analysis_scope == "Conformers":
+
+        pairwise_scope_df = st.session_state.get("geometry_index")
+        pairwise_scope_unit_label = "conformers"
+
+    else:
+
+        pairwise_scope_df = df
+        pairwise_scope_unit_label = "molecules"
 
     # ============================================================
     # PROPERTY DEFINITIONS
@@ -524,7 +582,7 @@ with tab_pairwise:
         "natoms": "Number of atoms",
     }
 
-    relationship_options = [ prop for prop in relationship_properties if prop in df.columns ]
+    relationship_options = [ prop for prop in relationship_properties if pairwise_scope_df is not None and prop in pairwise_scope_df.columns ]
 
     # ============================================================
     # VALIDATION
@@ -596,7 +654,7 @@ with tab_pairwise:
 
             required_columns.append( color_col )
 
-        relationship_df = df[ required_columns ].copy()
+        relationship_df = pairwise_scope_df[ required_columns ].copy()
         for column in required_columns[1:]:
 
             relationship_df[column] = pd.to_numeric( relationship_df[column], errors="coerce", )
@@ -705,6 +763,7 @@ with tab_pairwise:
                         title=dict(
                             text=relationship_properties[color_col],
                             font=dict( family="Arial", size=13, color=COLORS["text_secondary"], ),
+                            side="right",
                         ),
                         tickfont=dict( family="Arial", size=11, color=COLORS["text_secondary"], ),
                         thickness=14,
@@ -862,7 +921,7 @@ with tab_pairwise:
 
                 event = st.plotly_chart( fig_relationship, width="stretch", on_select="rerun", selection_mode=("points", "box", "lasso"), key=plot_key, )
 
-                st.caption( f"{len(plot_df):,} molecules available for this property relationship." )
+                st.caption( f"{len(plot_df):,} {pairwise_scope_unit_label} available for this property relationship." )
 
 
             with col2:
@@ -1581,9 +1640,9 @@ with tab_pairwise:
         # ATOMIC PROPERTIES
         # =================================================
 
-        with st.expander( "⚛ Atomic properties", expanded=False, ):
+        with st.expander( "⚛ Atomic properties of selected conformer", expanded=False, ):
 
-            st.caption( "Per-atom properties for the selected molecular geometry." )
+            st.caption( "Per-atom properties for the selected molecular conformer." )
 
             # =================================================
             # ATOMIC DATA
@@ -1785,7 +1844,7 @@ with tab_pairwise:
         # ATOMIC POSITIONS
         # =================================================
 
-        with st.expander( "📍 Atomic positions", expanded=False, ):
+        with st.expander( "📍 Atomic positions of selected conformer", expanded=False, ):
 
             try:
 

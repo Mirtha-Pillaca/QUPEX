@@ -1381,7 +1381,7 @@ def print_hdf5_tree_limited( hdf, max_molecules=2, ):
 
         for geom in get_geometry_keys(mol_group):
 
-            st.markdown( f"**📐 Geometry `{geom}`**" )
+            st.markdown( f"**📐 Conformer `{geom}`**" )
 
             geom_group = mol_group[geom]
 

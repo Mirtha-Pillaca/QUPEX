@@ -13,7 +13,7 @@ kaleido>=0.2.1
 matplotlib>=3.8
 
 # Cheminformatics / molecular visualization
-rdkit>=2023.9.6
+rdkit>=2023.03.3
 py3Dmol>=2.1
 
 # Machine learning 

@@ -213,8 +213,7 @@ with col_main:
 
     st.markdown(
         """
-        - **Web application:** *(deployment URL to be added)*
-        - **Source code (GitHub):** *(repository URL to be added)*
-        - **Software DOI:** *(to be added once this repository is archived via Zenodo)*
+        - **Web application:** *https://qupex-app.streamlit.app*
+        - **Source code (GitHub):** *https://github.com/Mirtha-Pillaca/QUPEX*
         """
     )

@@ -943,7 +943,7 @@ def render_footer():
         </div>
 
         <div class="app-footer-links">
-            <a href="" target="_blank">
+            <a href="https://qupex-app.streamlit.app" target="_blank">
                 Web application
             </a>
             <span>·</span>

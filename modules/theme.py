@@ -947,7 +947,7 @@ def render_footer():
                 Web application
             </a>
             <span>·</span>
-            <a href="" target="_blank">
+            <a href="https://arxiv.org/abs/2610.18100" target="_blank">
                 Reference
             </a>
             <span>·</span>

@@ -199,10 +199,13 @@ with col_main:
     section_header("8. References")
 
     st.markdown(
-        """
-        A citation for the QUPEX application itself is in preparation (see the "Reference" link in
-        the page footer) and will be added here once finalized.
-        """
+    """
+    If you use the QUPEX application in your research, please cite the following paper:
+
+    Mirtha Pillaca Quispe, Alejandra Hinostroza Caldas, and Leonardo Medrano Sandonas,
+    *QUPEX: A Streamlit-Based Framework for Visualizing Quantum-Mechanical Property Spaces of Organic Molecules*,
+    arXiv:2610.18100, 2026. https://arxiv.org/abs/2610.18100.
+    """
     )
 
     # ========================================================

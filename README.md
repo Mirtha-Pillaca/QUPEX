@@ -257,4 +257,8 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Citation
 
-If you use this application in your research, please cite the project accordingly. Citation details will be provided here once available.
+If you use this application in your research, please cite the following paper:
+
+Mirtha Pillaca Quispe, Alejandra Hinostroza Caldas, and Leonardo Medrano Sandonas. QUPEX: A Streamlit-Based Framework for Visualizing Quantum-Mechanical Property Spaces of Organic Molecules. arXiv:2610.18100, 2026.
+
+https://arxiv.org/abs/2610.18100

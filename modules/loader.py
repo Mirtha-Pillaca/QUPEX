@@ -1,7 +1,5 @@
-import inspect
 import os
 import re
-import sys
 import time
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -276,11 +274,24 @@ _QM7X_SIGNATURE_PROPERTIES = { "eMBD", "ePBE0", "ePBE0+MBD", "atPOL", "mC6", "mP
 # sampled geometry before it counts as a QM7-X-shaped match.
 _QM7X_MIN_PROPERTY_HITS = 3
 
+def _decode_hdf5_attr(value):
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return str(value)
 
 def identify_dataset(hdf, sample_molecules=5):
     """
     Best-effort scientific identification of an opened HDF5 dataset.
     """
+    # QM9 columnar HDF5 format created by build_qm9_hdf5.py
+    if (
+        _decode_hdf5_attr(hdf.attrs.get("dataset_name", ""))
+        == "QM9"
+        and "XYZ_Ang" in hdf
+        and "Elements" in hdf
+        and "SMILES" in hdf
+    ):
+        return "QM9"
 
     try:
         molecule_keys = _sorted_molecule_keys(hdf)
@@ -330,6 +341,7 @@ def identify_dataset(hdf, sample_molecules=5):
         return "QM7-X"
 
     return None
+
 
 
 # ============================================================
@@ -990,12 +1002,66 @@ def load_qm7x_index( path="data/qm7x_index.parquet", ):
 # MOLECULE LOADING
 # ============================================================
 
+@st.cache_resource(show_spinner=False)
+def _qm9_row_lookup(_hdf, filename, file_size):
+    """
+    {molecule_id: row} for a columnar QM9 file, built once per file. Row
+    numbers cannot be derived from the IDs because QM9 numbering has gaps.
+    """
+
+    return { value.decode("utf-8") if isinstance(value, bytes) else str(value): row for row, value in enumerate(_hdf["XYZ_file"][:]) }
+
+
+def _load_qm9_molecule(hdf, molecule_id, geometry_id=None):
+    """
+    Load one molecule from a columnar QM9 file, with the same keys as the
+    per-molecule groups of QM7-X. QM9 has one optimized geometry per molecule.
+    """
+
+    # Imported here: modules.datasets imports this module.
+    from modules.build_qm9_index import _parse_list
+    from modules.datasets import QM9_SCALAR_PROPERTIES
+
+    row = _qm9_row_lookup(hdf, hdf.filename, hdf.id.get_filesize()).get(molecule_id)
+
+    if row is None:
+
+        raise KeyError( f"Molecule {molecule_id} not found." )
+
+    opt_geometry_id = f"{molecule_id}-opt"
+
+    if geometry_id not in (None, opt_geometry_id):
+
+        raise KeyError( f"Geometry {geometry_id} not found for molecule {molecule_id}." )
+
+    atomic_numbers = { symbol: number for number, symbol in ATOMIC_SYMBOLS.items() }
+
+    result = {
+        "molecule_id": molecule_id,
+        "geometry_id": opt_geometry_id,
+        "atNUM": np.array( [ atomic_numbers[symbol] for symbol in _parse_list(hdf["Elements"][row]) ] ),
+        "atXYZ": np.asarray( _parse_list(hdf["XYZ_Ang"][row]), dtype=float ),
+    }
+
+    for prop in QM9_SCALAR_PROPERTIES:
+
+        if prop in hdf:
+
+            result[prop] = np.asarray( hdf[prop][row] ).squeeze()
+
+    return result
+
+
 def load_molecule( hdf, molecule_id, geometry_id=None, ):
     """
     Load one molecule and one geometry from HDF5.
     """
 
     molecule_id = str( molecule_id )
+
+    if isinstance( hdf.get("XYZ_file"), h5py.Dataset ):
+
+        return _load_qm9_molecule( hdf, molecule_id, geometry_id )
 
     if molecule_id not in hdf:
 
@@ -1192,13 +1258,9 @@ def molecule_2d_image(
     # QM7-X -> RDKit
     # ========================================================
 
-    mol = qm7x_to_rdkit(
-        molecule
-    )
+    mol = qm7x_to_rdkit( molecule )
 
-    mol = Chem.Mol(
-        mol
-    )
+    mol = Chem.Mol( mol )
 
     # ========================================================
     # HYDROGENS
@@ -1206,23 +1268,17 @@ def molecule_2d_image(
 
     if show_hydrogens:
 
-        mol = Chem.AddHs(
-            mol
-        )
+        mol = Chem.AddHs( mol )
 
     else:
 
-        mol = Chem.RemoveHs(
-            mol
-        )
+        mol = Chem.RemoveHs( mol )
 
     # ========================================================
     # 2D COORDINATES
     # ========================================================
 
-    Chem.rdDepictor.Compute2DCoords(
-        mol
-    )
+    Chem.rdDepictor.Compute2DCoords( mol )
 
     # ========================================================
     # DRAWER
@@ -1231,10 +1287,7 @@ def molecule_2d_image(
     width = int(size[0])
     height = int(size[1])
 
-    drawer = rdMolDraw2D.MolDraw2DCairo(
-        width,
-        height,
-    )
+    drawer = rdMolDraw2D.MolDraw2DCairo( width, height, )
 
     options = drawer.drawOptions()
 
@@ -1244,15 +1297,11 @@ def molecule_2d_image(
 
     if background == "black":
 
-        options.setBackgroundColour(
-            (0.0, 0.0, 0.0)
-        )
+        options.setBackgroundColour( (0.0, 0.0, 0.0) )
 
     elif background == "transparent":
 
-        options.setBackgroundColour(
-            (0.0, 0.0, 0.0, 0.0)
-        )
+        options.setBackgroundColour( (0.0, 0.0, 0.0, 0.0) )
 
     else:
 
@@ -1500,7 +1549,6 @@ PROPERTY_INFO = {
 # PROPERTY TABLE
 # ============================================================
 
-
 def qm7x_property_table():
     """Return the QM7-X property reference table."""
 
@@ -1731,4 +1779,3 @@ def get_composition_statistics_from_index(opt_df, max_molecules=None):
         "min_atoms": min(atom_counts) if atom_counts else 0,
         "max_atoms": max(atom_counts) if atom_counts else 0,
     }
-

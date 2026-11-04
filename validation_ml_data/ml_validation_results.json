@@ -1,0 +1,91 @@
+{
+  "artifact_version": 1,
+  "created_utc": "2026-11-02T08:28:58.031079+00:00",
+  "npz_sha256": "6a20627c575cd9225d8bfb0478fe99352d94769e329a42ee95d3e0e9ac9d1385",
+  "model": {
+    "url": "https://zenodo.org/records/22893015/files/qued-model_dip.pkl?download=1",
+    "sha256": "31a4938af67eca9320689dd1967aa7e8f5d0096acbefd01e2fbb8c0f689e0d0f",
+    "filename": "qued-model_dip.pkl",
+    "size": 61556444,
+    "mtime_utc": "2026-09-22T12:50:15.079481+00:00"
+  },
+  "datasets": {
+    "train": {
+      "url": "https://zenodo.org/records/22893015/files/QMdesc_qm7x-eq_train.h5?download=1",
+      "filename": "QMdesc_qm7x-eq_train.h5",
+      "size": 324442696,
+      "mtime_utc": "2026-09-22T12:50:16.212665+00:00"
+    },
+    "test": {
+      "url": "https://zenodo.org/records/22893015/files/QMdesc_qm7x-eq_test.h5?download=1",
+      "filename": "QMdesc_qm7x-eq_test.h5",
+      "size": 214627560,
+      "mtime_utc": "2026-09-22T12:50:15.423371+00:00"
+    }
+  },
+  "feature_names": [
+    "FermiEne",
+    "BandEne",
+    "NumElec",
+    "h0Ene",
+    "sccEne",
+    "3rdEne",
+    "repEne",
+    "mbdEne",
+    "TBdip_norm",
+    "TBeig_1",
+    "TBeig_2",
+    "TBeig_3",
+    "TBeig_4",
+    "TBeig_5",
+    "TBeig_6",
+    "TBeig_7",
+    "TBeig_8",
+    "TBchg_1",
+    "TBchg_2",
+    "TBchg_3",
+    "TBchg_4",
+    "TBchg_5",
+    "TBchg_6",
+    "TBchg_7",
+    "TBchg_8",
+    "TBchg_9",
+    "TBchg_10",
+    "TBchg_11",
+    "TBchg_12",
+    "TBchg_13",
+    "TBchg_14",
+    "TBchg_15",
+    "TBchg_16",
+    "TBchg_17",
+    "TBchg_18",
+    "TBchg_19",
+    "TBchg_20",
+    "TBchg_21",
+    "TBchg_22",
+    "TBchg_23"
+  ],
+  "n_features": 40,
+  "x_test_shap_rows": 200,
+  "x_test_shap_note": "First rows of the independent test set in file order, raw (unscaled) features from ml_tools._extract_feature_row.",
+  "metrics": {
+    "train": {
+      "r2": 0.9993591169298837,
+      "mae": 0.004620749932235885,
+      "rmse": 0.006658099529166139,
+      "n": 25000
+    },
+    "test": {
+      "r2": 0.989542864081088,
+      "mae": 0.015482258132560439,
+      "rmse": 0.024396306335583075,
+      "n": 16537
+    }
+  },
+  "versions": {
+    "python": "3.10.18",
+    "numpy": "1.26.4",
+    "scikit-learn": "1.7.2",
+    "xgboost": "2.1.4"
+  }
+}

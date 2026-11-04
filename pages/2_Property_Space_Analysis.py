@@ -14,6 +14,8 @@ from modules.loader import (
     ATOM_INFO, PROPERTY_INFO
 )
 
+from modules.datasets import get_property_info, get_property_label, get_available_properties
+
 from modules.plot_style import scientific_layout
 
 from modules.theme import apply_global_theme, COLORS, section_header
@@ -64,6 +66,11 @@ if df is None or df.empty:
 # ============================================================
 # AVAILABLE PROPERTIES
 # ============================================================
+
+# QM9 uses its own property definitions from the dataset registry;
+# every other dataset keeps the QM7-X definitions from modules.loader.
+if st.session_state.get("dataset_identity") == "QM9":
+    PROPERTY_INFO = get_property_info("QM9")
 
 available_properties = [ p for p in PROPERTY_INFO if p in df.columns ]
 
@@ -222,7 +229,23 @@ with tab_distribution:
 
                 with distribution_col2:
 
-                    st.markdown("**Controls**")
+                    #st.markdown("**Controls**")
+
+                    st.markdown(
+                        """
+                        <div style="
+                            padding: 0.2rem 0 0.8rem 0;
+                        ">
+                        <div style=" font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #0891B2; margin-bottom: 0.3rem; ">
+                            Display Settings
+                        </div>
+
+                        <div style=" font-size: 0.88rem; line-height: 1.5; color: #64748B; ">
+                            Adjust the histogram bin count and Y-axis scale.                   
+                            </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
                     n_bins = st.slider( "Histogram bins", min_value=20, max_value=100, value=50, step=5, key=("distribution_bins_" + selected_property), )
 
@@ -363,7 +386,8 @@ with tab_matrix_correlation:
         options=correlation_scope_properties,
         default=correlation_scope_properties,
         format_func=lambda x: ( f"{PROPERTY_INFO[x].get('name', x)} ({x})" ),
-        key="distribution_correlation_properties",
+        # Separate key for QM9 so a selection made on another dataset is not carried over.
+        key=( "distribution_correlation_properties" + ( "_QM9" if st.session_state.get("dataset_identity") == "QM9" else "" ) ),
     )
 
     correlation_method = st.selectbox(
@@ -582,6 +606,16 @@ with tab_pairwise:
         "natoms": "Number of atoms",
     }
 
+    default_x_property, default_y_property = "HLgap", "mPOL"
+
+    # QM9: scalar properties from the dataset registry that are present
+    # and numeric in the index, labelled "Name (unit)".
+    if st.session_state.get("dataset_identity") == "QM9":
+
+        relationship_properties = { prop: get_property_label(prop, dataset="QM9") for prop in get_available_properties( pairwise_scope_df, dataset="QM9", ) }
+
+        default_x_property, default_y_property = "HOMO_LUMO_gap_au", "Polarizability_bohr3"
+
     relationship_options = [ prop for prop in relationship_properties if pairwise_scope_df is not None and prop in pairwise_scope_df.columns ]
 
     # ============================================================
@@ -602,7 +636,7 @@ with tab_pairwise:
 
         with col_x:
 
-            default_x = ( "HLgap" if "HLgap" in relationship_options else relationship_options[0] )
+            default_x = ( default_x_property if default_x_property in relationship_options else relationship_options[0] )
 
             x_property = st.selectbox(
                 "X-axis property",
@@ -617,7 +651,7 @@ with tab_pairwise:
 
             possible_y = [ p for p in relationship_options if p != x_property ]
 
-            default_y = ( "mPOL" if "mPOL" in possible_y else possible_y[0] )
+            default_y = ( default_y_property if default_y_property in possible_y else possible_y[0] )
             y_property = st.selectbox(
                 "Y-axis property",
                 possible_y,
@@ -711,7 +745,7 @@ with tab_pairwise:
 
                 hovertemplate=(
 
-                    "<b>QM7-X ID:</b> "
+                    "<b>ID:</b> "
                     "%{customdata[0]}"
 
                     "<br>"
@@ -1264,27 +1298,27 @@ with tab_pairwise:
 
             def _render_2d_controls():
 
-                with st.expander("2D Visualization Controls"):
+                #with st.expander("2D Visualization Controls"):
 
-                    col_a, col_b = st.columns(2)
+                col_a, col_b = st.columns([1,1], gap="medium", )
 
-                    with col_a:
+                with col_a:
 
-                        background_2d = st.selectbox( "Background", [ "White", "Black", "Transparent", ], index=0, key="molecular_analysis_2d_background", )
+                    background_2d = st.selectbox( "Background", [ "White", "Black", "Transparent", ], index=0, key="molecular_analysis_2d_background", )
 
-                    with col_b:
+                with col_b:
 
-                        size_2d = st.selectbox( "Image size", [ "Small", "Medium", "Large", ], index=1, key="molecular_analysis_2d_size", )
+                    size_2d = st.selectbox( "Image size", [ "Small", "Medium", "Large", ], index=1, key="molecular_analysis_2d_size", )
 
-                    col_c, col_d = st.columns(2)
+                col_c, col_d = st.columns(2)
 
-                    with col_c:
+                with col_c:
 
-                        labels_2d = st.checkbox( "Atom labels", value=True, key="molecular_analysis_2d_labels", )
+                    labels_2d = st.checkbox( "Atom labels", value=True, key="molecular_analysis_2d_labels", )
 
-                    with col_d:
+                with col_d:
 
-                        hydrogens_2d = st.checkbox( "Show H", value=True, key="molecular_analysis_2d_hydrogens", )
+                    hydrogens_2d = st.checkbox( "Show H", value=True, key="molecular_analysis_2d_hydrogens", )
 
                 return background_2d, size_2d, labels_2d, hydrogens_2d
 
@@ -1306,14 +1340,14 @@ with tab_pairwise:
                             color: var(--clr-accent-strong);
                             text-align: center;
                         ">
-                            2D Molecular Structure
+                            2D  Molecular Structure
                         </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-                size_map_2d = { "Small": (400, 300), "Medium": (500, 400), "Large": (650, 500), }
+                size_map_2d = { "Small": (300, 200), "Medium": (500, 400), "Large": (650, 500), }
 
                 background_map_2d = { "White": "white", "Black": "black", "Transparent": "transparent", }
 
@@ -1327,24 +1361,24 @@ with tab_pairwise:
                         show_atom_labels=labels_2d,
                     )
 
-                    image_col_left, image_col_center, image_col_right = st.columns( [1, 6, 1] )
+                    #image_col_left, image_col_center, image_col_right = st.columns( [1, 5, 0.1] )
 
-                    with image_col_center:
+                    #with image_col_center:
 
-                        st.image( image_2d, width="stretch", )
+                    st.image( image_2d, width="stretch", )
 
-                        png_buffer = io.BytesIO()
+                    png_buffer = io.BytesIO()
 
-                        image_2d.save( png_buffer, format="PNG", )
+                    image_2d.save( png_buffer, format="PNG", )
 
-                        st.download_button(
-                            "↓ Export PNG",
-                            data=png_buffer.getvalue(),
-                            file_name=( f"molecule_{molecule_id}_2d.png" ),
-                            mime="image/png",
-                            width='stretch',
-                            key=( f"molecular_analysis_2d_download_" f"{molecule_id}" ),
-                        )
+                    st.download_button(
+                        "↓ Export PNG",
+                        data=png_buffer.getvalue(),
+                        file_name=( f"molecule_{molecule_id}_2d.png" ),
+                        mime="image/png",
+                        width='stretch',
+                        key=( f"molecular_analysis_2d_download_" f"{molecule_id}" ),
+                    )
 
                 except Exception as e:
 
@@ -1353,45 +1387,45 @@ with tab_pairwise:
 
             def _render_3d_controls():
 
-                with st.expander("3D Visualization Controls"):
+                #with st.expander("3D Visualization Controls"):
 
-                    control_col1, control_col2, control_col3 = ( st.columns(3) )
+                control_col1, control_col2, control_col3 = ( st.columns(3) )
 
-                    with control_col1:
+                with control_col1:
 
-                        viewer_projection = st.selectbox( "Projection", [ "Free 3D", "X", "Y", "Z", ], key="molecular_analysis_projection", )
+                    viewer_projection = st.selectbox( "Projection", [ "Free 3D", "X", "Y", "Z", ], key="molecular_analysis_projection", )
 
-                    with control_col2:
+                with control_col2:
 
-                        viewer_background = st.selectbox( "Background", [ "black", "white", "transparent", ], key="molecular_analysis_background", )
+                    viewer_background = st.selectbox( "Background", [ "black", "white", "transparent", ], key="molecular_analysis_background", )
 
-                    with control_col3:
+                with control_col3:
 
-                        viewer_representation = st.selectbox( "Representation", [ "Stick + Sphere", "Stick", "Sphere", "Line", ], key="molecular_analysis_representation", )
+                    viewer_representation = st.selectbox( "Representation", [ "Stick + Sphere", "Stick", "Sphere", "Line", ], key="molecular_analysis_representation", )
 
-                    control_col4, control_col5 = ( st.columns(2) )
+                control_col4, control_col5 = ( st.columns(2) )
 
-                    with control_col4:
+                with control_col4:
 
-                        viewer_atom_scale = st.slider( "Atom size", min_value=0.15, max_value=0.60, value=0.30, step=0.01, key="molecular_analysis_atom_scale", )
+                    viewer_atom_scale = st.slider( "Atom size", min_value=0.15, max_value=0.60, value=0.30, step=0.01, key="molecular_analysis_atom_scale", )
 
-                    with control_col5:
+                with control_col5:
 
-                        viewer_bond_radius = st.slider( "Bond radius", min_value=0.03, max_value=0.30, value=0.12, step=0.01, key="molecular_analysis_bond_radius", )
+                    viewer_bond_radius = st.slider( "Bond radius", min_value=0.03, max_value=0.30, value=0.12, step=0.01, key="molecular_analysis_bond_radius", )
 
-                    control_col6, control_col7, control_col8 = ( st.columns(3) )
+                control_col6, control_col7, control_col8 = ( st.columns(3) )
 
-                    with control_col6:
+                with control_col6:
 
-                        viewer_show_labels = st.checkbox( "Atom labels", value=True, key="molecular_analysis_labels", )
+                    viewer_show_labels = st.checkbox( "Atom labels", value=True, key="molecular_analysis_labels", )
 
-                    with control_col7:
+                with control_col7:
 
-                        viewer_orthographic = st.checkbox( "Orthographic", value=False, key="molecular_analysis_orthographic", )
+                    viewer_orthographic = st.checkbox( "Orthographic", value=False, key="molecular_analysis_orthographic", )
 
-                    with control_col8:
+                with control_col8:
 
-                        viewer_spin = st.checkbox( "Auto rotate", value=False, key="molecular_analysis_spin", )
+                    viewer_spin = st.checkbox( "Auto rotate", value=False, key="molecular_analysis_spin", )
 
                 return (
                     viewer_projection,
@@ -1592,11 +1626,15 @@ with tab_pairwise:
 
                 with controls_col_2d:
 
-                    settings_2d = _render_2d_controls()
+                    with st.expander("2D Visualization Settings", expanded=False):
+
+                        settings_2d = _render_2d_controls()
 
                 with controls_col_3d:
 
-                    settings_3d = _render_3d_controls()
+                    with st.expander("3D Visualization Settings", expanded=False):
+
+                        settings_3d = _render_3d_controls()
 
                 fig_col_2d, fig_col_3d = st.columns( 2, gap="large" )
 
@@ -1612,9 +1650,29 @@ with tab_pairwise:
 
                 # Figure centered on the left; controls in a sidebar on the right.
 
-                fig_col, controls_col = st.columns( [3, 1], gap="large" )
+
+                fig_col, controls_col = st.columns( [2, 1], gap="small" )
 
                 with controls_col:
+
+                    st.markdown("<div style='height: 60px'></div>", unsafe_allow_html=True)
+                    
+                    st.markdown(
+                        """
+                        <div style="
+                            padding: 0.2rem 0 0.8rem 0;
+                        ">
+    
+                        <div style=" font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: 	uppercase; color: #0891B2; margin-bottom: 0.3rem; ">                            
+                        2D Visualization Settings
+                        </div>
+    
+                        <div style=" font-size: 0.88rem; line-height: 1.5; color: #64748B; ">
+                            Customize the molecular structure display, including background, image size, atom labels, and hydrogen visibility.                        </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
                     settings_2d = _render_2d_controls()
 
@@ -1626,9 +1684,30 @@ with tab_pairwise:
 
                 # Figure centered and scaled to the available width; controls in a sidebar on the right.
 
-                fig_col, controls_col = st.columns( [3, 1], gap="large" )
+                fig_col, controls_col = st.columns( [2, 1], gap="small" )
 
                 with controls_col:
+
+                    st.markdown("<div style='height: 81px'></div>", unsafe_allow_html=True)
+
+                    st.markdown(
+                        """
+                        <div style="
+                            padding: 0.2rem 0 0.8rem 0;
+                        ">
+    
+                        <div style=" font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: 	uppercase; color: #0891B2; margin-bottom: 0.3rem; ">                            
+                            3D Visualization Settings
+                        </div>
+    
+                        <div style=" font-size: 0.88rem; line-height: 1.5; color: #64748B; ">
+                            Customize the molecular visualization, including projection, background, representation, atom and bond sizes, labels, and rotation.
+                        </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    
 
                     settings_3d = _render_3d_controls()
 
@@ -2078,6 +2157,13 @@ with tab_pairwise:
                         "Exact exchange energy (eV)",
                 }
 
+                # QM9 uses its own property names (the list above is QM7-X).
+                is_qm9 = st.session_state.get("dataset_identity") == "QM9"
+
+                if is_qm9:
+
+                    comparison_properties = { prop: get_property_label(prop, dataset="QM9") for prop in PROPERTY_INFO }
+
                 available_comparison_properties = [
 
                     prop
@@ -2089,9 +2175,11 @@ with tab_pairwise:
 
                 if available_comparison_properties:
 
+                    preferred_property = "HOMO_LUMO_gap_au" if is_qm9 else "HLgap"
+
                     default_property = (
-                        "HLgap"
-                        if "HLgap"
+                        preferred_property
+                        if preferred_property
                         in available_comparison_properties
                         else available_comparison_properties[0]
                     )
@@ -2106,7 +2194,8 @@ with tab_pairwise:
 
                         format_func=lambda x: comparison_properties[x],
 
-                        key="comparison_plot_property",
+                        # Separate key for QM9 so a selection made on another dataset is not carried over.
+                        key="comparison_plot_property" + ("_QM9" if is_qm9 else ""),
                     )
 
                     comparison_plot_rows = []
@@ -2301,7 +2390,7 @@ with tab_pairwise:
 
                                 colorbar=dict( title=dict( text="Z-score" ), thickness=14, ),
 
-                                hovertemplate=( "<b>QM7-X ID:</b> %{x}" "<br><b>Property:</b> %{y}" "<br><b>Z-score:</b> %{z:.2f}" "<extra></extra>" ),
+                                hovertemplate=( "<b>ID:</b> %{x}" "<br><b>Property:</b> %{y}" "<br><b>Z-score:</b> %{z:.2f}" "<extra></extra>" ),
                             )
                         )
 

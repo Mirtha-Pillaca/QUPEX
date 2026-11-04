@@ -2,7 +2,11 @@
 # ML TOOLS -- QUED-XGBoost dipole-moment model
 # ============================================================
 
+import hashlib
+import importlib.metadata
+import json
 import pickle
+import platform
 from pathlib import Path
 
 import h5py
@@ -25,7 +29,6 @@ VIOLET = "#7C3AED"
 ORANGE = "#F97316"
 MUTED = "#64748B"
 TEXT = "#0F172A"
-
 
 # ============================================================
 # FEATURE NAMES
@@ -383,13 +386,13 @@ def build_predicted_vs_actual_figure(
     overlay=False,
     height=440,
 ):
-    """Predicted vs actual, training vs. independent test."""
+    """Predicted vs actual, training vs. Independent Test."""
 
     axis_min, axis_max = padded_range(y_train, y_train_pred, y_test, y_pred)
 
     if not overlay:
 
-        fig = make_subplots( rows=1, cols=2, subplot_titles=("Training", "Independent test"), )
+        fig = make_subplots( rows=1, cols=2, subplot_titles=("Training", "Independent Test"), )
 
         fig.add_trace(
             go.Scattergl(
@@ -447,7 +450,7 @@ def build_predicted_vs_actual_figure(
             go.Scattergl(
                 x=y_train, y=y_train_pred, mode="markers",
                 marker=dict(size=4, opacity=0.30, color=CYAN, symbol="circle"),
-                name="Training — actual vs. predicted",
+                name="Training - actual vs. predicted",
             )
         )
 
@@ -455,7 +458,7 @@ def build_predicted_vs_actual_figure(
             go.Scattergl(
                 x=y_test, y=y_pred, mode="markers",
                 marker=dict(size=5, opacity=0.45, color=ORANGE, symbol="diamond"),
-                name="Independent test — actual vs. predicted",
+                name="Independent test - actual vs. predicted",
             )
         )
 
@@ -503,14 +506,14 @@ def build_residuals_figure(
     overlay=False,
     height=440,
 ):
-    """Residuals vs predicted, training vs. independent test."""
+    """Residuals vs predicted, training vs. Independent Test."""
 
     x_min, x_max = padded_range(y_train_pred, y_pred)
     y_min, y_max = padded_range(residuals_train, residuals_test)
 
     if not overlay:
 
-        fig = make_subplots( rows=1, cols=2, subplot_titles=("Training", "Independent test"), )
+        fig = make_subplots( rows=1, cols=2, subplot_titles=("Training", "Independent Test"), )
 
         fig.add_trace(
             go.Scattergl(
@@ -584,7 +587,7 @@ def build_distribution_figure(
     height=420,
     n_bins=50,
 ):
-    """Actual vs predicted value distributions, training vs. independent test."""
+    """Actual vs Predicted value Distributions, training vs. Independent Test."""
 
     axis_min, axis_max = padded_range(y_train, y_train_pred, y_test, y_pred)
     bin_size = (axis_max - axis_min) / n_bins
@@ -592,7 +595,7 @@ def build_distribution_figure(
 
     if not overlay:
 
-        fig = make_subplots( rows=1, cols=2, subplot_titles=("Training", "Independent test"), )
+        fig = make_subplots( rows=1, cols=2, subplot_titles=("Training", "Independent Test"), )
 
         fig.add_trace(
             go.Histogram(
@@ -638,8 +641,7 @@ def build_distribution_figure(
 
     else:
 
-        # 4 series in one panel (train-actual, train-predicted,
-        # test-actual, test-predicted). 
+        # 4 series in one panel (train-actual, train-predicted, test-actual, test-predicted). 
         fig = go.Figure()
 
         fig.add_trace(
@@ -687,7 +689,7 @@ def build_residual_distribution_figure(
     height=400,
     n_bins=60,
 ):
-    """Residual distributions, training vs. independent test."""
+    """Residual distributions, Training vs. Independent Test."""
 
     r_min, r_max = padded_range(residuals_train, residuals_test)
     r_bin_size = (r_max - r_min) / n_bins
@@ -697,7 +699,7 @@ def build_residual_distribution_figure(
 
         fig = make_subplots(
             rows=1, cols=2,
-            subplot_titles=("Training", "Independent test"),
+            subplot_titles=("Training", "Independent Test"),
         )
 
         fig.add_trace(
@@ -837,3 +839,177 @@ def build_shap_beeswarm_figure(shap_values, max_display=10):
     plt.tight_layout()
 
     return fig
+
+
+def build_shap_bar_figure(shap_values, max_display=10):
+    """SHAP bar plot (mean |SHAP|), sized and labeled like the beeswarm."""
+
+    import shap
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+
+    bar_ax = shap.plots.bar(shap_values, max_display=max_display, ax=ax, show=False)
+
+    fig.set_size_inches(5.5, 3.5)
+
+    for label in [*bar_ax.get_yticklabels(), *bar_ax.get_xticklabels(), *bar_ax.texts]:
+        label.set_fontsize(SHAP_FEATURE_LABEL_FONTSIZE)
+
+    bar_ax.xaxis.label.set_fontsize(SHAP_AXIS_LABEL_FONTSIZE)
+
+    plt.tight_layout()
+
+    return fig
+
+
+# ============================================================
+# SHAP TEST SAMPLE (independent test set only)
+# ============================================================
+
+SHAP_MAX_ROWS = 200
+
+
+@st.cache_data(show_spinner=False)
+def load_first_test_rows(path, mtime, size, n_rows=SHAP_MAX_ROWS):
+    """
+    First n_rows valid rows of the independent test HDF5, raw features in
+    the same iteration order as load_validation_data. Stops reading as
+    soon as they are found.
+    """
+
+    rows = []
+
+    with h5py.File(path, "r") as dataset:
+
+        for molid in dataset.keys():
+
+            conformers = dataset[molid]
+
+            for confid in conformers.keys():
+
+                try:
+                    rows.append(_extract_feature_row(conformers[confid]))
+                except (KeyError, ValueError):
+                    continue
+
+                if len(rows) == n_rows:
+                    return np.asarray(rows)
+
+    return np.asarray(rows)
+
+# ============================================================
+# PRECOMPUTED VALIDATION ARTIFACTS
+# ============================================================
+#
+# Read-only side of the files written by the offline generator,
+# modules/build_ml_validation_artifacts.py, which the app never imports.
+# ARTIFACT_VERSION and ARTIFACT_ARRAYS must match that script.
+
+ARTIFACT_VERSION = 1
+ARTIFACT_ARRAYS = ( "y_train", "y_train_pred", "y_test", "y_pred", "X_test_shap", )
+
+
+def _sha256_file(path):
+
+    digest = hashlib.sha256()
+
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            digest.update(chunk)
+
+    return digest.hexdigest()
+
+
+@st.cache_data(show_spinner=False)
+def cached_sha256(path, mtime, size):
+    """SHA-256 of a file, computed once per (path, mtime, size) signature."""
+
+    return _sha256_file(path)
+
+
+@st.cache_data(show_spinner=False)
+def _read_validation_artifacts(npz_signature, json_signature, model_url, train_url, test_url):
+    """
+    Return (arrays, metadata, None) for valid artifacts, or
+    (None, None, reason). Needs neither the model nor the HDF5 files.
+    """
+
+    npz_path, json_path = npz_signature[0], json_signature[0]
+
+    try:
+
+        metadata = json.loads(Path(json_path).read_text())
+
+        if metadata.get("artifact_version") != ARTIFACT_VERSION:
+            return None, None, "they use a different format version"
+
+        if _sha256_file(npz_path) != metadata.get("npz_sha256"):
+            return None, None, "the NPZ does not match its JSON metadata (corrupt or mismatched files)"
+
+        if metadata["model"].get("url") != model_url or metadata["datasets"]["train"].get("url") != train_url or metadata["datasets"]["test"].get("url") != test_url:
+            return None, None, "they refer to different Zenodo files"
+
+        if metadata.get("feature_names") != list(FEATURE_NAMES):
+            return None, None, "they use a different feature set"
+
+        with np.load(npz_path, allow_pickle=False) as data:
+            arrays = {name: data[name] for name in ARTIFACT_ARRAYS}
+
+        n_train = metadata["metrics"]["train"]["n"]
+        n_test = metadata["metrics"]["test"]["n"]
+        n_shap = min(SHAP_MAX_ROWS, n_test)
+
+        shapes_ok = (
+            arrays["y_train"].shape == (n_train,)
+            and arrays["y_train_pred"].shape == (n_train,)
+            and arrays["y_test"].shape == (n_test,)
+            and arrays["y_pred"].shape == (n_test,)
+            and arrays["X_test_shap"].shape == (n_shap, len(FEATURE_NAMES))
+        )
+
+        if not shapes_ok:
+            return None, None, "the arrays have unexpected shapes"
+
+        if not all(np.isfinite(arrays[name]).all() for name in ARTIFACT_ARRAYS):
+            return None, None, "the arrays contain non-finite values"
+
+        for split, (y_true, y_hat) in { "train": (arrays["y_train"], arrays["y_train_pred"]), "test": (arrays["y_test"], arrays["y_pred"]), }.items():
+
+            recomputed = compute_metrics(y_true, y_hat)
+
+            if not all(np.isclose(recomputed[name], metadata["metrics"][split][name], rtol=1e-9, atol=0) for name in ("r2", "mae", "rmse", "n")):
+                return None, None, f"the recorded {split} metrics do not match the arrays"
+
+    except Exception as exc:
+
+        return None, None, f"they could not be read ({type(exc).__name__}: {exc})"
+
+    return arrays, metadata, None
+
+
+def load_validation_artifacts(npz_path, json_path, model_url, train_url, test_url):
+
+    npz_path, json_path = Path(npz_path), Path(json_path)
+
+    if not npz_path.exists() or not json_path.exists():
+        return None, None, f"the files were not found in {npz_path.parent.name}/"
+
+    return _read_validation_artifacts( get_file_signature(npz_path), get_file_signature(json_path), model_url, train_url, test_url, )
+
+
+def library_version_differences(metadata):
+    """Library versions that differ from the ones recorded at generation time."""
+
+    current = {"python": platform.python_version()}
+
+    for package in ("numpy", "scikit-learn", "xgboost"):
+
+        try:
+            current[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            pass
+
+    recorded = metadata.get("versions", {})
+
+    return { name: (recorded.get(name), version) for name, version in current.items() if recorded.get(name) != version }

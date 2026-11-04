@@ -5,8 +5,9 @@ import hashlib
 import json
 
 import pandas as pd
+import h5py
 
-from modules.loader import ( build_qm7x_index, load_qm7x_index, )
+from modules.loader import ( build_qm7x_index, load_qm7x_index, identify_dataset)
 
 
 # ============================================================
@@ -28,6 +29,23 @@ DEFAULT_INDEX_CACHE_DIR = Path( "data/index_cache" )
 # ============================================================
 
 INDEX_SCHEMA_VERSION = 4
+
+
+def get_dataset_index_version(dataset_identity):
+    """
+    Dataset-specific index version, or None for datasets without one.
+
+    Only datasets listed here get the extra version check in
+    `index_is_compatible`; QM7-X has none, so its existing caches
+    keep being validated by INDEX_SCHEMA_VERSION alone.
+    """
+
+    if dataset_identity == "QM9":
+        from modules.build_qm9_index import QM9_INDEX_VERSION
+
+        return QM9_INDEX_VERSION
+
+    return None
 
 # ============================================================
 # FILE SIGNATURE
@@ -192,6 +210,7 @@ def indexes_exist(
 def index_is_compatible(
     source_path=None,
     metadata_path=DEFAULT_METADATA,
+    dataset_index_version=None,
 ):
     """
     Decide whether an on-disk index can be safely reused.
@@ -223,6 +242,12 @@ def index_is_compatible(
 
     if metadata.get("schema_version") != INDEX_SCHEMA_VERSION:
         return False
+
+    # Dataset-specific layout version (e.g. QM9); skipped when None.
+    if dataset_index_version is not None:
+
+        if metadata.get("dataset_index_version") != dataset_index_version:
+            return False
 
     if source_path:
 
@@ -388,23 +413,26 @@ def build_analysis_indexes(
         }
     """
 
-    opt_index_path = Path(
-        opt_index_path
-    )
+    opt_index_path = Path( opt_index_path )
 
-    geometry_index_path = Path(
-        geometry_index_path
-    )
+    geometry_index_path = Path( geometry_index_path )
 
-    opt_index_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    opt_index_path.parent.mkdir( parents=True, exist_ok=True, )
 
-    geometry_index_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    geometry_index_path.parent.mkdir( parents=True, exist_ok=True, )
+
+
+    # QM9: use its dedicated index builder.
+    if identify_dataset(hdf) == "QM9":
+        from modules.build_qm9_index import build_qm9_indexes
+
+        return build_qm9_indexes(
+            hdf,
+            opt_index_path=str(opt_index_path),
+            geometry_index_path=str(geometry_index_path),
+            max_molecules=max_molecules,
+        )
+
 
     # ========================================================
     # OPTIMIZED INDEX
@@ -517,6 +545,10 @@ def prepare_dataset_indexes(
         )
     )
 
+    dataset_index_version = get_dataset_index_version(
+        identify_dataset(hdf)
+    )
+
     # ========================================================
     # CHECK EXISTING INDEX
     # ========================================================
@@ -529,6 +561,7 @@ def prepare_dataset_indexes(
         ) and index_is_compatible(
             source_path,
             metadata_path,
+            dataset_index_version,
         ):
 
             opt_df, geometry_df = (
@@ -583,6 +616,9 @@ def prepare_dataset_indexes(
             result["geometry_df"]
         ),
     }
+
+    if dataset_index_version is not None:
+        metadata["dataset_index_version"] = dataset_index_version
 
     save_metadata(
         metadata,

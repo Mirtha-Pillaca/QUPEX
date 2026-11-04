@@ -6,6 +6,7 @@ pandas>=2.2
 pyarrow>=16.0
 scipy>=1.11
 Pillow>=10.0
+# qm9pack>=0.1.2  # Temporarily disabled
 
 # Plotting
 plotly>=5.22
@@ -17,8 +18,8 @@ rdkit>=2023.03.3
 py3Dmol>=2.1
 
 # Machine learning 
-scikit-learn>=1.4
-xgboost>=2.0
+scikit-learn==1.7.2
+xgboost==2.1.4
 shap>=0.44
 
 # Remote dataset loading (Zenodo)

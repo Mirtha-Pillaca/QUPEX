@@ -9,8 +9,10 @@ from modules.loader import (
     classify_geometry_id,
     get_composition_statistics,
     get_composition_statistics_from_index,
-    get_available_properties,   
+    get_available_properties,
 )
+
+from modules.datasets import get_property_info, get_available_properties as get_index_properties
 
 from modules.plot_style import scientific_layout
 from modules.plot_distributions import plot_size_distribution
@@ -64,11 +66,22 @@ opt_df = st.session_state["opt_index"]
 # BASIC DATASET INFORMATION
 # ============================================================
 
-try:
-    n_molecules = len(hdf)
+dataset_identity = st.session_state.get("dataset_identity")
 
-except Exception:
-    n_molecules = len(list(hdf.keys()))
+# QM9 is a columnar HDF5 (one dataset per property, one row per
+# molecule), so its root keys are columns, not molecules.
+is_qm9 = dataset_identity == "QM9"
+
+if is_qm9:
+    n_molecules = int(opt_df["molecule_id"].nunique())
+
+else:
+
+    try:
+        n_molecules = len(hdf)
+
+    except Exception:
+        n_molecules = len(list(hdf.keys()))
 
 # ============================================================
 # DATASET CACHE ID
@@ -116,20 +129,38 @@ else:
 # PROPERTY INFORMATION
 # ============================================================
 
-try:
+def _registry_property_table(df, dataset):
+    """Property / Meaning / Units / Category table from the dataset registry, for the properties present in `df`."""
 
-    available_properties = get_available_properties(hdf)
+    info = get_property_info(dataset)
 
-    property_table = qm7x_property_table()
+    rows = [ { "Property": prop, "Meaning": info[prop]["name"], "Units": info[prop]["unit"], "Category": info[prop]["category"], } for prop in get_index_properties(df, dataset=dataset) ]
 
-    property_table = property_table[ property_table["Property"].isin( available_properties ) ].copy()
+    return pd.DataFrame( rows, columns=[ "Property", "Meaning", "Units", "Category", ], )
+
+
+if is_qm9:
+
+    property_table = _registry_property_table(opt_df, "QM9")
 
     n_properties = len(property_table)
 
-except Exception:
+else:
 
-    property_table = pd.DataFrame()
-    n_properties = 0
+    try:
+
+        available_properties = get_available_properties(hdf)
+
+        property_table = qm7x_property_table()
+
+        property_table = property_table[ property_table["Property"].isin( available_properties ) ].copy()
+
+        n_properties = len(property_table)
+
+    except Exception:
+
+        property_table = pd.DataFrame()
+        n_properties = 0
 
 # ============================================================
 # COMPOSITION STATISTICS
@@ -143,13 +174,41 @@ composition_cache = st.session_state["composition_stats_cache"]
 composition_cache_key = f"{dataset_id}_composition"
 
 
+def _qm9_composition_statistics(df):
+    """Same result keys as `get_composition_statistics_from_index`, using the QM9 element columns (H, C, N, O, F)."""
+
+    atom_counts = df["n_atoms"].astype(int).tolist()
+    formulas = df["formula"].dropna().tolist()
+
+    element_counts = { symbol: int(df[f"n_{symbol}"].sum()) for symbol in ("H", "C", "N", "O", "F") if f"n_{symbol}" in df.columns and int(df[f"n_{symbol}"].sum()) > 0 }
+
+    total_atoms = sum(element_counts.values())
+    n_mols = len(atom_counts)
+
+    return {
+        "element_counts": element_counts,
+        "atom_counts": atom_counts,
+        "formulas": formulas,
+        "formula_counts": { formula: int(count) for formula, count in pd.Series(formulas).value_counts().items() },
+        "total_atoms": total_atoms,
+        "molecules_analyzed": n_mols,
+        "average_atoms": total_atoms / n_mols if n_mols else 0.0,
+        "min_atoms": min(atom_counts) if atom_counts else 0,
+        "max_atoms": max(atom_counts) if atom_counts else 0,
+    }
+
+
 if composition_cache_key not in composition_cache:
 
     with st.spinner("Analyzing molecular composition..."):
 
         try:
 
-            composition_cache[composition_cache_key] = ( get_composition_statistics_from_index(opt_df) )
+            if is_qm9:
+                composition_cache[composition_cache_key] = _qm9_composition_statistics(opt_df)
+
+            else:
+                composition_cache[composition_cache_key] = ( get_composition_statistics_from_index(opt_df) )
 
         except ValueError:
 
@@ -250,7 +309,7 @@ with tab_overview:
         if df is None or df.empty:
             return []
 
-        element_columns = {"H": "n_H", "C": "n_C", "N": "n_N", "O": "n_O", "S": "n_S", "Cl": "n_Cl"}
+        element_columns = {"H": "n_H", "C": "n_C", "N": "n_N", "O": "n_O", "F": "n_F", "S": "n_S", "Cl": "n_Cl"}
 
         elements = []
 
@@ -287,7 +346,10 @@ with tab_overview:
         st.metric( "Molecules", f"{n_molecules:,}", )
 
     with col2:
-        st.metric( "Total conformers", f"{geometry_stats['total_geometries']:,}",  )
+        if is_qm9:
+            st.metric( "Geometries", f"{geometry_stats['total_geometries']:,}", help="QM9 provides one optimized geometry per molecule.", )
+        else:
+            st.metric( "Total conformers", f"{geometry_stats['total_geometries']:,}",  )
 
     with col3:
         st.metric( "Elements", ", ".join(elements), )
@@ -320,7 +382,23 @@ with tab_overview:
 
         with col3:
 
-            st.markdown("**Controls**")
+            #st.markdown("**Controls**")
+
+            st.markdown(
+                    """
+                    <div style="
+                        padding: 0.2rem 0 0.8rem 0;
+                    ">
+                    <div style=" font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #0891B2; margin-bottom: 0.3rem; ">
+                        Display Settings
+                    </div>
+
+                    <div style=" font-size: 0.88rem; line-height: 1.5; color: #64748B; ">
+                        Customize the histogram display, including the mean value, bar counts, and atom selection (all atoms or excluding hydrogen).                    </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
             size_mode = st.radio( "Size", ["All atoms", "Without H"], index=0, key="molecular_size_mode", )
 
@@ -473,9 +551,54 @@ with tab_overview:
     # HDF5 STRUCTURE
     # ========================================================
 
+    def _show_columnar_hdf5_preview(hdf):
+        """Preview a columnar HDF5 (QM9): root attributes plus one row per column dataset."""
+
+        st.markdown("### 📁 Root `/`")
+        st.caption( "Columnar layout: one dataset per property, one row per molecule." )
+
+        attrs = { key: (value.decode("utf-8") if isinstance(value, bytes) else value) for key, value in hdf.attrs.items() }
+
+        if attrs:
+            st.markdown( " · ".join( f"`{key}` = **{value}**" for key, value in attrs.items() ) )
+
+        rows = []
+
+        for name in sorted( hdf.keys(), key=str.lower, ):
+
+            obj = hdf[name]
+
+            if not hasattr(obj, "shape"):
+                continue
+
+            example = obj[0] if obj.shape and obj.shape[0] else ""
+            example = example.decode("utf-8") if isinstance(example, bytes) else example
+            example = str(example)
+            example = example if len(example) <= 48 else example[:45] + "..."
+            example = example.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+            rows.append( f""" <tr> <td><code>{name}</code></td> <td>{obj.shape}</td> <td>{obj.dtype}</td> <td><code>{example}</code></td> </tr> """ )
+
+        st.markdown(
+            f"""
+            <div style="width: fit-content; max-width: 100%;">
+                <div class="qm7x-table-wrapper">
+                <table class="qm7x-table">
+                    <thead> <tr> <th>Dataset</th> <th>Shape</th> <th>Dtype</th> <th>First row</th> </tr> </thead>
+                    <tbody> {"".join(rows)} </tbody>
+                </table>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     with st.expander("🌳 HDF5 dataset structure", expanded=False):
         try:
-            print_hdf5_tree_limited( hdf, max_molecules=1, )
+            if is_qm9:
+                _show_columnar_hdf5_preview(hdf)
+            else:
+                print_hdf5_tree_limited( hdf, max_molecules=1, )
         except Exception as e:
             st.error(f"Could not inspect HDF5 structure: {e}")
 
@@ -512,7 +635,7 @@ with tab_molecular:
 
         analysis_scope = "Molecules"
 
-    element_symbols = ("H", "C", "N", "O", "S", "Cl")
+    element_symbols = ("H", "C", "N", "O", "F", "S", "Cl")
 
     required_opt_columns = {"molecule_id", "formula"}
 
@@ -1092,31 +1215,63 @@ with tab_properties:
     # PROPERTIES AVAILABLE IN LOADED HDF5
     # --------------------------------------------------------
 
-    available_properties = get_available_properties(hdf)
+    # Metric label and section title for each of the three tables.
+    category_labels = {
+        "energetic": ( "Energetic", "Energetic properties", ),
+        "molecular": ( "Molecular / electronic", "Molecular and electronic properties", ),
+        "structural": ( "Atomic / structural", "Atomic and structural properties", ),
+    }
 
-    # --------------------------------------------------------
-    # COMPLETE QM7-X PROPERTY REFERENCE
-    # --------------------------------------------------------
+    if is_qm9:
 
-    reference_df = qm7x_property_table()
+        # QM9: property definitions come from the dataset registry
+        # (modules.datasets), restricted to columns in the index.
+        properties_df = property_table.reset_index(drop=True)
 
-    # Keep only properties that are actually present
-    # in the currently loaded HDF5 dataset.
-    properties_df = reference_df[ reference_df["Property"].isin( available_properties ) ].copy()
+        def _codes(*categories):
+            return set( properties_df.loc[ properties_df["Category"].isin(categories), "Property", ] )
 
-    properties_df.reset_index( drop=True, inplace=True, )
+        energetic_codes = _codes("Thermochemistry")
 
-    # --------------------------------------------------------
-    # CATEGORY DEFINITIONS
-    # --------------------------------------------------------
+        electronic_codes = _codes("Electronic")
 
-    energetic_codes = { "eAT", "eC", "eEE", "eKIN", "eMBD", "eNE", "eNN", "ePBE0", "ePBE0+MBD", "eTS", "eX", "eXC", "eXX", }
+        response_codes = _codes("Response", "Polarizability tensor")
 
-    electronic_codes = { "eH", "eL", "HLgap", }
+        structural_codes = _codes("Rotational")
 
-    response_codes = { "DIP", "mC6", "mPOL", }
+        category_labels = {
+            "energetic": ( "Thermochemical", "Thermochemical properties", ),
+            "molecular": ( "Molecular / electronic", "Molecular and electronic properties", ),
+            "structural": ( "Rotational", "Rotational constants", ),
+        }
 
-    structural_codes = { "atNUM", "atPOL", "atXYZ", "hCHG", "vdwR", }
+    else:
+
+        available_properties = get_available_properties(hdf)
+
+        # --------------------------------------------------------
+        # COMPLETE QM7-X PROPERTY REFERENCE
+        # --------------------------------------------------------
+
+        reference_df = qm7x_property_table()
+
+        # Keep only properties that are actually present
+        # in the currently loaded HDF5 dataset.
+        properties_df = reference_df[ reference_df["Property"].isin( available_properties ) ].copy()
+
+        properties_df.reset_index( drop=True, inplace=True, )
+
+        # --------------------------------------------------------
+        # CATEGORY DEFINITIONS
+        # --------------------------------------------------------
+
+        energetic_codes = { "eAT", "eC", "eEE", "eKIN", "eMBD", "eNE", "eNN", "ePBE0", "ePBE0+MBD", "eTS", "eX", "eXC", "eXX", }
+
+        electronic_codes = { "eH", "eL", "HLgap", }
+
+        response_codes = { "DIP", "mC6", "mPOL", }
+
+        structural_codes = { "atNUM", "atPOL", "atXYZ", "hCHG", "vdwR", }
 
     # --------------------------------------------------------
     # CATEGORY TABLES
@@ -1157,13 +1312,13 @@ with tab_properties:
         st.metric( "Total properties", total_properties, )
 
     with col2:
-        st.metric( "Energetic", energetic_count, )
+        st.metric( category_labels["energetic"][0], energetic_count, )
 
     with col3:
-        st.metric( "Molecular / electronic", molecular_count, )
+        st.metric( category_labels["molecular"][0], molecular_count, )
 
     with col4:
-        st.metric( "Atomic / structural", structural_count, )
+        st.metric( category_labels["structural"][0], structural_count, )
 
     # --------------------------------------------------------
     # ENERGETIC PROPERTIES
@@ -1171,7 +1326,7 @@ with tab_properties:
 
     if not energetic_df.empty:
 
-        section_header("Energetic properties")
+        section_header(category_labels["energetic"][1])
 
         st.markdown( property_table_html( energetic_df ), unsafe_allow_html=True, )
 
@@ -1181,7 +1336,7 @@ with tab_properties:
 
     if not molecular_df.empty:
 
-        section_header("Molecular and electronic properties")
+        section_header(category_labels["molecular"][1])
 
         st.markdown( property_table_html( molecular_df ), unsafe_allow_html=True, )
 
@@ -1191,6 +1346,6 @@ with tab_properties:
 
     if not atomic_df.empty:
 
-        section_header("Atomic and structural properties")
+        section_header(category_labels["structural"][1])
 
         st.markdown( property_table_html( atomic_df ), unsafe_allow_html=True, )

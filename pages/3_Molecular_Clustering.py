@@ -19,9 +19,10 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.mixture import GaussianMixture
-from sklearn.metrics import silhouette_score
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 
-from modules.datasets import (PROPERTY_INFO, get_available_properties, get_property_label, )
+from modules.datasets import (PROPERTY_INFO, get_available_properties, get_property_label, get_property_info, get_clustering_defaults, )
 from modules.plot_style import (
     scientific_layout,
     SEQUENTIAL_COLORSCALE_STOPS,
@@ -46,7 +47,7 @@ apply_global_theme()
 
 st.title("Molecular Clustering")
 
-st.write("Explores chemical-space structure through PCA and t-SNE dimensionality reduction. A Gaussian Mixture Model (GMM) is fitted independently to each resulting 2D projection to identify molecular clusters.")
+st.write("Explores chemical-space structure through PCA and t-SNE dimensionality reduction. A Gaussian Mixture Model (GMM) or K-Means is fitted independently to each resulting 2D projection to identify molecular clusters.")
 
 # ============================================================
 # CHECK DATASET
@@ -122,8 +123,32 @@ DEFAULT_POINT_SIZE = 6
 
 TSNE_MAX_ITER = 1000
 
+CLUSTERING_ALGORITHMS = ["GMM", "K-Means"]
+DEFAULT_CLUSTERING_ALGORITHM = "GMM"
 
-available_properties = get_available_properties(df)
+KMEANS_N_INIT = 10
+
+
+dataset_identity = st.session_state.get("dataset_identity")
+
+# QM9 uses its own property definitions, clustering-eligible properties
+# and defaults from the dataset registry; every other dataset keeps the
+# QM7-X behavior.
+if dataset_identity == "QM9":
+
+    PROPERTY_INFO = get_property_info("QM9")
+
+    DEFAULT_PROPERTIES = get_clustering_defaults("QM9")
+
+    available_properties = get_available_properties(df, dataset="QM9", clustering_only=True)
+
+    # Per-atom list columns are not used here and make Streamlit's cache
+    # fall back to pickling the whole table on every rerun.
+    df = df.drop(columns=["elements", "coordinates"], errors="ignore")
+
+else:
+
+    available_properties = get_available_properties(df)
 
 if len(available_properties) < 2:
 
@@ -134,8 +159,8 @@ if len(available_properties) < 2:
 
 properties_key = f"chemical_space_properties_{dataset_id}"
 
-pca_gmm_key = "pca_gmm_components"
-tsne_gmm_key = "tsne_gmm_components"
+clustering_algorithm_key = "clustering_algorithm"
+n_clusters_key = "clustering_n_clusters"
 tsne_perplexity_key = "tsne_perplexity"
 tsne_seed_key = "tsne_seed"
 
@@ -148,9 +173,15 @@ selected_properties = st.session_state.get( properties_key, default_properties, 
 
 selected_properties = [ prop for prop in selected_properties if prop in available_properties ] or default_properties
 
-pca_gmm_components = st.session_state.get( pca_gmm_key, DEFAULT_GMM_COMPONENTS, )
+clustering_algorithm = st.session_state.get( clustering_algorithm_key, DEFAULT_CLUSTERING_ALGORITHM, )
 
-tsne_gmm_components = st.session_state.get( tsne_gmm_key, DEFAULT_GMM_COMPONENTS, )
+if clustering_algorithm not in CLUSTERING_ALGORITHMS:
+    clustering_algorithm = DEFAULT_CLUSTERING_ALGORITHM
+
+is_gmm = clustering_algorithm == "GMM"
+
+# One shared cluster count; each projection still gets its own, independent fit.
+n_clusters = st.session_state.get( n_clusters_key, DEFAULT_GMM_COMPONENTS, )
 
 tsne_perplexity = st.session_state.get( tsne_perplexity_key, 30, )
 
@@ -401,48 +432,115 @@ def calculate_gmm_model_selection( X_2d, component_range, covariance_type, n_ini
 
     return pd.DataFrame(records)
 
-# --- PCA's own, independent GMM -----------------------------
+# ------------------------------------------------------------
+# K-Means -- also fit directly on each projection's OWN 2D coordinates.
+# ------------------------------------------------------------
 
-try:
+@st.cache_data(show_spinner=False)
+def calculate_kmeans_2d( X_2d, n_clusters, n_init, random_state, ):
+    """
+    Fit K-Means directly on 2D projection coordinates (PCA or t-SNE),
+    mirroring calculate_gmm_2d.
+    """
 
-    ( pca_gmm_model, pca_gmm_labels, pca_gmm_probabilities, pca_gmm_max_probability, ) = calculate_gmm_2d( X_pca, pca_gmm_components, GMM_COVARIANCE_TYPE, GMM_N_INIT, DEFAULT_RANDOM_SEED, )
+    model = KMeans( n_clusters=n_clusters, n_init=n_init, random_state=random_state, )
 
-except Exception as exc:
+    labels = model.fit_predict(X_2d)
 
-    st.error(
-        f"Could not fit the PCA GMM with {pca_gmm_components} "
-        f"components: {exc}. Try a lower \"Number of GMM "
-        "components\" value for PCA."
-    )
+    distance_to_center = np.linalg.norm( X_2d - model.cluster_centers_[labels], axis=1, )
 
-    st.stop()
-
-pca_gmm_silhouette = calculate_silhouette( X_pca, pca_gmm_labels, )
-
-pca_gmm_aic = pca_gmm_model.aic(X_pca)
-pca_gmm_bic = pca_gmm_model.bic(X_pca)
+    return ( model, labels, distance_to_center, )
 
 
-# --- t-SNE's own, independent GMM ---------------------------
+@st.cache_data(show_spinner=False)
+def calculate_cluster_scores(X_2d, labels):
+    """Calinski-Harabasz and Davies-Bouldin indexes (both linear in n, unlike silhouette)."""
 
-try:
+    if len(np.unique(labels)) < 2:
+        return np.nan, np.nan
 
-    ( tsne_gmm_model, tsne_gmm_labels, tsne_gmm_probabilities, tsne_gmm_max_probability, ) = calculate_gmm_2d( X_tsne, tsne_gmm_components, GMM_COVARIANCE_TYPE, GMM_N_INIT, DEFAULT_RANDOM_SEED, )
+    return ( calinski_harabasz_score(X_2d, labels), davies_bouldin_score(X_2d, labels), )
 
-except Exception as exc:
 
-    st.error(
-        f"Could not fit the t-SNE GMM with {tsne_gmm_components} "
-        f"components: {exc}. Try a lower \"Number of GMM "
-        "components\" value for t-SNE."
-    )
+@st.cache_data(show_spinner=False)
+def calculate_kmeans_model_selection( X_2d, cluster_range, n_init, random_state, ):
+    """Inertia/silhouette/Calinski-Harabasz/Davies-Bouldin for several cluster counts, on 2D data."""
 
-    st.stop()
+    records = []
 
-tsne_gmm_silhouette = calculate_silhouette( X_tsne, tsne_gmm_labels, )
+    for n_clusters in cluster_range:
 
-tsne_gmm_aic = tsne_gmm_model.aic(X_tsne)
-tsne_gmm_bic = tsne_gmm_model.bic(X_tsne)
+        try:
+
+            model = KMeans( n_clusters=n_clusters, n_init=n_init, random_state=random_state, )
+
+            labels = model.fit_predict(X_2d)
+
+            calinski_harabasz, davies_bouldin = calculate_cluster_scores(X_2d, labels)
+
+            records.append( { "Clusters": n_clusters, "Inertia": model.inertia_, "Silhouette": calculate_silhouette(X_2d, labels), "Calinski-Harabasz": calinski_harabasz, "Davies-Bouldin": davies_bouldin, } )
+
+        except Exception:
+
+            records.append( { "Clusters": n_clusters, "Inertia": np.nan, "Silhouette": np.nan, "Calinski-Harabasz": np.nan, "Davies-Bouldin": np.nan, } )
+
+    return pd.DataFrame(records)
+
+
+def fit_projection_clustering(X_2d, projection_label):
+    """
+    Fit the selected algorithm on one projection's own 2D coordinates.
+    PCA and t-SNE each call this separately -- they never share a model.
+    """
+
+    try:
+
+        if is_gmm:
+
+            ( model, labels, _, max_probability, ) = calculate_gmm_2d( X_2d, n_clusters, GMM_COVARIANCE_TYPE, GMM_N_INIT, DEFAULT_RANDOM_SEED, )
+
+            distance_to_center = None
+
+        else:
+
+            ( model, labels, distance_to_center, ) = calculate_kmeans_2d( X_2d, n_clusters, KMEANS_N_INIT, DEFAULT_RANDOM_SEED, )
+
+            max_probability = None
+
+    except Exception as exc:
+
+        st.error(
+            f"Could not fit the {projection_label} {clustering_algorithm} with "
+            f"{n_clusters} clusters: {exc}. Try a lower \"Number of "
+            "clusters\" value."
+        )
+
+        st.stop()
+
+    result = {
+        "model": model,
+        "labels": labels,
+        "max_probability": max_probability,
+        "distance_to_center": distance_to_center,
+        "silhouette": calculate_silhouette( X_2d, labels, ),
+    }
+
+    if is_gmm:
+
+        result["aic"] = model.aic(X_2d)
+        result["bic"] = model.bic(X_2d)
+
+    else:
+
+        result["inertia"] = model.inertia_
+        result["calinski_harabasz"], result["davies_bouldin"] = calculate_cluster_scores( X_2d, labels, )
+
+    return result
+
+
+pca_clustering = fit_projection_clustering( X_pca, "PCA", )
+
+tsne_clustering = fit_projection_clustering( X_tsne, "t-SNE", )
 
 
 # ============================================================
@@ -459,9 +557,15 @@ def color_label(value):
     """Readable label for a 'Color by' selection."""
 
     if value == "Cluster":
-        return "GMM Cluster"
+        return f"{clustering_algorithm} Cluster"
 
     return property_name(value)
+
+
+def format_metric(value, spec=".3f"):
+    """Format a score, showing an em dash when it is undefined."""
+
+    return "—" if value is None or np.isnan(value) else f"{value:{spec}}"
 
 
 def _hex_to_rgba(hex_color, alpha):
@@ -521,29 +625,39 @@ def gmm_ellipse_xy(mean, covariance, confidence=0.95, n_points=200):
     return x, y
 
 
-def build_projection_figure( plot_df, x_col, y_col, x_title, y_title, gmm_model, gmm_labels, gmm_max_probability, color_by, color_options, show_ellipses, ellipse_confidence, ellipse_opacity, show_centers, point_size, cluster_order, figure_key, ):
+def build_projection_figure( plot_df, x_col, y_col, x_title, y_title, clustering, color_by, color_options, show_ellipses, ellipse_confidence, ellipse_opacity, show_centers, point_size, cluster_order, figure_key, ):
     """
     Build one projection's scatter plot (PCA or t-SNE) -- identical
-    logic for both, parameterized by which 2D columns/GMM/labels to
-    use. Visualization-only arguments (color_by, show_ellipses,
-    ellipse_confidence, ellipse_opacity, show_centers, point_size)
-    only ever affect this uncached function -- never the cached
-    analysis pipeline above.
+    logic for both, parameterized by which 2D columns and clustering
+    result (GMM or K-Means) to use. Visualization-only arguments
+    (color_by, show_ellipses, ellipse_confidence, ellipse_opacity,
+    show_centers, point_size) only ever affect this uncached function
+    -- never the cached analysis pipeline above.
     """
+
+    model = clustering["model"]
 
     plot_df = plot_df.copy()
 
-    plot_df["Cluster"] = gmm_labels.astype(str)
-    plot_df["Membership probability"] = gmm_max_probability
+    plot_df["Cluster"] = clustering["labels"].astype(str)
 
     hover_data = {
         "molecule_id": True,
         x_col: ":.4f",
         y_col: ":.4f",
-        # Always show GMM assignment confidence in the hover, since
-        # it was already computed and otherwise silently dropped.
-        "Membership probability": ":.1%",
     }
+
+    # Always show the per-point assignment quality in the hover: GMM
+    # membership probability, or K-Means distance to the cluster center.
+    if clustering["max_probability"] is not None:
+
+        plot_df["Membership probability"] = clustering["max_probability"]
+        hover_data["Membership probability"] = ":.1%"
+
+    if clustering["distance_to_center"] is not None:
+
+        plot_df["Distance to center"] = clustering["distance_to_center"]
+        hover_data["Distance to center"] = ":.3f"
 
     cluster_color_sequence = [ get_qualitative_color(i) for i in range(len(cluster_order)) ]
 
@@ -559,7 +673,7 @@ def build_projection_figure( plot_df, x_col, y_col, x_title, y_title, gmm_model,
             hover_data=hover_data,
         )
 
-        fig.update_layout(legend_title_text="GMM Cluster")
+        fig.update_layout(legend_title_text=f"{clustering_algorithm} Cluster")
 
     else:
 
@@ -571,25 +685,30 @@ def build_projection_figure( plot_df, x_col, y_col, x_title, y_title, gmm_model,
             y=y_col,
             color=color_by,
             color_continuous_scale=SEQUENTIAL_COLORSCALE_STOPS,
-            labels={color_by: get_property_label(color_by)},
+            labels={color_by: get_property_label(color_by, dataset=dataset_identity)},
             hover_data=hover_data,
         )
 
     fig.update_traces( marker=dict( size=point_size, opacity=0.72, ), selector=dict(mode="markers"), )
 
-    if show_ellipses:
+    centers = model.means_ if is_gmm else model.cluster_centers_
 
-        for component in range(gmm_model.n_components):
+    center_word = "component" if is_gmm else "cluster"
 
-            # Same deterministic sequence used for the point colors
-            # above, so an ellipse always matches its own cluster's
-            # point color -- including past 8 components, where the
-            # plain QUALITATIVE_COLORS list alone would repeat.
-            component_color = get_qualitative_color(component)
+    for component in range(len(centers)):
+
+        # Same deterministic sequence used for the point colors
+        # above, so an ellipse/center always matches its own cluster's
+        # point color -- including past 8 components, where the
+        # plain QUALITATIVE_COLORS list alone would repeat.
+        component_color = get_qualitative_color(component)
+
+        # Gaussian ellipses only exist for GMM.
+        if show_ellipses and is_gmm:
 
             ellipse_x, ellipse_y = gmm_ellipse_xy(
-                gmm_model.means_[component],
-                gmm_model.covariances_[component],
+                model.means_[component],
+                model.covariances_[component],
                 confidence=ellipse_confidence,
             )
 
@@ -609,37 +728,37 @@ def build_projection_figure( plot_df, x_col, y_col, x_title, y_title, gmm_model,
                     ),
                     name=f"GMM {component} ({int(ellipse_confidence * 100)}%)",
                     hoverinfo="skip",
-                    legendgroup=f"gmm_{component}",
+                    legendgroup=f"cluster_{component}",
                     # Avoid a redundant legend entry when points are
                     # already colored by the same GMM cluster.
                     showlegend=(color_by != "Cluster"),
                 )
             )
 
-            if show_centers:
+        if show_centers:
 
-                fig.add_trace(
-                    go.Scatter(
-                        x=[gmm_model.means_[component][0]],
-                        y=[gmm_model.means_[component][1]],
-                        mode="markers",
-                        marker=dict(
-                            size=11,
-                            symbol="x",
-                            color=component_color,
-                            line=dict(width=2),
-                        ),
-                        name=f"GMM {component} center",
-                        hovertemplate=(
-                            f"GMM component {component}"
-                            f"<br>{x_title}=%{{x:.3f}}"
-                            f"<br>{y_title}=%{{y:.3f}}"
-                            "<extra></extra>"
-                        ),
-                        legendgroup=f"gmm_{component}",
-                        showlegend=False,
-                    )
+            fig.add_trace(
+                go.Scatter(
+                    x=[centers[component][0]],
+                    y=[centers[component][1]],
+                    mode="markers",
+                    marker=dict(
+                        size=11,
+                        symbol="x",
+                        color=component_color,
+                        line=dict(width=2),
+                    ),
+                    name=f"{clustering_algorithm} {component} center",
+                    hovertemplate=(
+                        f"{clustering_algorithm} {center_word} {component}"
+                        f"<br>{x_title}=%{{x:.3f}}"
+                        f"<br>{y_title}=%{{y:.3f}}"
+                        "<extra></extra>"
+                    ),
+                    legendgroup=f"cluster_{component}",
+                    showlegend=False,
                 )
+            )
 
     fig.update_layout( height=560, xaxis_title=x_title, yaxis_title=y_title, )
 
@@ -650,16 +769,151 @@ def build_projection_figure( plot_df, x_col, y_col, x_title, y_title, gmm_model,
     fig.update_xaxes(constrain="domain")
     fig.update_yaxes(scaleanchor="x", scaleratio=1, constrain="domain")
 
+    if color_by != "Cluster":
+
+        # Vertical colorbar on the right, its title rotated to run along
+        # the bar, so long property names with units are not clipped.
+        fig.update_layout(
+            coloraxis_colorbar=dict(
+                title=dict( text=get_property_label(color_by, dataset=dataset_identity), side="right", ),
+            ),
+        )
+
     fig = use_webgl_for_large_scatter_total(fig)
 
     st.plotly_chart( fig, width='stretch', key=figure_key, )
+
+
+def render_cluster_summary(clustering, projection_label):
+    """Cluster sizes table for one projection."""
+
+    labels = clustering["labels"]
+
+    st.caption(f"{projection_label} {clustering_algorithm} clusters")
+
+    cluster_summary = ( pd.Series(labels, name="Cluster") .value_counts() .sort_index() .rename("Molecules") .reset_index() )
+
+    cluster_summary["Fraction"] = ( cluster_summary["Molecules"] / len(labels) ).map(lambda x: f"{x:.1%}")
+
+    cluster_summary["Cluster"] = ( f"{projection_label} " + cluster_summary["Cluster"].astype(str) )
+
+    st.dataframe( cluster_summary, width='stretch', hide_index=True, )
+
+
+def reset_color_by_to_cluster():
+    """On an algorithm switch, color both projections by the new clusters again."""
+
+    for prefix in ("pca", "tsne"):
+        st.session_state[f"{prefix}_color_by_{dataset_id}"] = "Cluster"
+
+
+def _highlight_selected(row, selected, column="Components"):
+
+    if row[column] == selected:
+
+        return [ f"background-color: {COLORS.get('accent_bg', '#FFF3CD')}" ] * len(row)
+
+    return [""] * len(row)
+
+
+def render_clustering_diagnostics(X_2d, clustering, projection_label, axis_names):
+    """
+    Algorithm-specific diagnostics for one projection: AIC/BIC and
+    weights for GMM; inertia, Calinski-Harabasz, Davies-Bouldin and
+    centers for K-Means. Both include 2-10 cluster model selection.
+    """
+
+    model = clustering["model"]
+
+    cluster_range = tuple( range(GMM_COMPONENT_MIN, GMM_COMPONENT_MAX + 1) )
+
+    if is_gmm:
+
+        with st.expander(f"▼ GMM diagnostics ({projection_label} space)"):
+
+            gmm_diag_col1, gmm_diag_col2 = ( st.columns(2) )
+
+            with gmm_diag_col1:
+                st.metric("Components", n_clusters)
+
+                st.metric("AIC", f"{clustering['aic']:,.0f}")
+
+            with gmm_diag_col2:
+                st.metric("BIC", f"{clustering['bic']:,.0f}")
+
+                st.metric( "Silhouette", format_metric(clustering["silhouette"]), )
+
+            st.caption(
+                "Converged: "
+                f"{'yes' if model.converged_ else 'no'} "
+                f"in {model.n_iter_} iterations."
+            )
+
+            st.markdown("**Cluster weights**")
+
+            weights_df = pd.DataFrame( { "Cluster": [ f"{projection_label} {i}" for i in range(n_clusters) ], "Weight": model.weights_, } )
+
+            st.dataframe( weights_df, width='stretch', hide_index=True, )
+
+            st.markdown("**Model selection (2-10 components)**")
+
+            selection_df = calculate_gmm_model_selection( X_2d, cluster_range, GMM_COVARIANCE_TYPE, GMM_N_INIT, DEFAULT_RANDOM_SEED, )
+
+            st.dataframe( selection_df.style.apply( _highlight_selected, selected=n_clusters, axis=1, ), width='stretch', hide_index=True, )
+
+            st.caption( "The highlighted row is the currently selected \"Number of clusters\" value above." )
+
+    else:
+
+        with st.expander(f"▼ K-Means diagnostics ({projection_label} space)"):
+
+            kmeans_diag_col1, kmeans_diag_col2 = ( st.columns(2) )
+
+            with kmeans_diag_col1:
+                st.metric("Clusters", n_clusters)
+
+                st.metric( "Inertia (WCSS)", f"{clustering['inertia']:,.1f}", help="Within-cluster sum of squared distances to the cluster centers (lower is tighter).", )
+
+                st.metric( "Calinski-Harabasz", format_metric(clustering["calinski_harabasz"], ",.1f"), help="Ratio of between- to within-cluster dispersion (higher is better).", )
+
+            with kmeans_diag_col2:
+                st.metric( "Silhouette", format_metric(clustering["silhouette"]), )
+
+                st.metric( "Davies-Bouldin", format_metric(clustering["davies_bouldin"]), help="Average similarity of each cluster to its most similar cluster (lower is better).", )
+
+            st.caption( f"Best of {KMEANS_N_INIT} k-means++ initializations; " f"{model.n_iter_} iterations." )
+
+            st.markdown("**Cluster centers**")
+
+            centers_df = pd.DataFrame(
+                {
+                    "Cluster": [ f"{projection_label} {i}" for i in range(n_clusters) ],
+                    f"{axis_names[0]} center": model.cluster_centers_[:, 0],
+                    f"{axis_names[1]} center": model.cluster_centers_[:, 1],
+                    "Size": np.bincount( clustering["labels"], minlength=n_clusters, ),
+                }
+            )
+
+            st.dataframe( centers_df, width='stretch', hide_index=True, )
+
+            st.markdown("**Model selection (2-10 clusters)**")
+
+            selection_df = calculate_kmeans_model_selection( X_2d, cluster_range, KMEANS_N_INIT, DEFAULT_RANDOM_SEED, )
+
+            st.dataframe( selection_df.style.apply( _highlight_selected, selected=n_clusters, column="Clusters", axis=1, ), width='stretch', hide_index=True, )
+
+            st.caption(
+                "The highlighted row is the currently selected \"Number of "
+                "clusters\" value above. Look for an elbow in inertia; higher "
+                "silhouette/Calinski-Harabasz and lower Davies-Bouldin are better."
+            )
 
 
 # ============================================================
 #TABS
 # ============================================================
 
-tab_chemical_analysis = st.tabs( ["🧩 PCA vs t-SNE (GMM)"] )[0]
+tab_chemical_analysis = st.tabs( ["🧩 PCA vs t-SNE (GMM & K-Means)"] )[0]
 
 
 
@@ -703,37 +957,78 @@ with tab_chemical_analysis:
         st.metric( "PCA variance (2D)", f"{pca_explained_variance[:2].sum() * 100:.1f}%", help="Cumulative explained variance of the 2D PCA projection shown below.", )
     with metric_col4:
 
-        st.metric( "PCA GMM silhouette", ( "—" if np.isnan(pca_gmm_silhouette) else f"{pca_gmm_silhouette:.3f}" ), help="From the GMM fitted directly on the PCA coordinates.", )
+        st.metric( f"PCA {clustering_algorithm} silhouette", format_metric(pca_clustering["silhouette"]), help=f"From the {clustering_algorithm} fitted directly on the PCA coordinates.", )
 
     with metric_col5:
 
-        st.metric( "t-SNE GMM silhouette", ( "—" if np.isnan(tsne_gmm_silhouette) else f"{tsne_gmm_silhouette:.3f}" ), help="From a SEPARATE GMM fitted directly on the t-SNE coordinates.", )
+        st.metric( f"t-SNE {clustering_algorithm} silhouette", format_metric(tsne_clustering["silhouette"]), help=f"From a SEPARATE {clustering_algorithm} fitted directly on the t-SNE coordinates.", )
 
     # ============================================================
     # SHARED ANALYSIS CONTROLS
     # ============================================================
 
-    selected_properties_widget = st.multiselect(
-        "Properties / features",
-        options=available_properties,
-        default=default_properties,
-        format_func=lambda prop: (
-            f"{PROPERTY_INFO.get(prop, {}).get('name', prop)} "
-            f"({prop})"
-        ),
-        help=(
-            "At least two are required. PCA reduces these to 2D for "
-            "plotting; t-SNE embeds them directly in 2D; both "
-            "independent GMMs cluster on their own 2D projection, not "
-            "on these raw properties."
-        ),
-        key=properties_key,
-    )
+    with st.container(border=True):
 
-    st.caption(
-        f"**{len(selected_properties)}** properties/features selected "
-        f"for this analysis."
-    )
+        st.caption("Shared settings -- applied to both the PCA and the t-SNE projection")
+
+        shared_col1, shared_col2 = st.columns(2, gap="large")
+
+        with shared_col1:
+
+            st.radio(
+                "Clustering algorithm",
+                options=CLUSTERING_ALGORITHMS,
+                index=CLUSTERING_ALGORITHMS.index(DEFAULT_CLUSTERING_ALGORITHM),
+                horizontal=True,
+                key=clustering_algorithm_key,
+                on_change=reset_color_by_to_cluster,
+                help=(
+                    "Fitted separately on the 2D PCA coordinates and on the "
+                    "2D t-SNE coordinates -- never on the raw properties. "
+                    "GMM: soft, elliptical clusters with membership "
+                    "probabilities and AIC/BIC. K-Means: hard assignments "
+                    "to the nearest of k centers."
+                ),
+            )
+
+        with shared_col2:
+
+            st.slider(
+                "Number of clusters",
+                min_value=GMM_COMPONENT_MIN,
+                max_value=GMM_COMPONENT_MAX,
+                value=DEFAULT_GMM_COMPONENTS,
+                step=1,
+                key=n_clusters_key,
+                help=(
+                    "Used for both projections; each projection still gets "
+                    "its own, independent fit."
+                ),
+            )
+
+        selected_properties_widget = st.multiselect(
+            "Properties / features",
+            options=available_properties,
+            default=default_properties,
+            format_func=lambda prop: (
+                f"{PROPERTY_INFO.get(prop, {}).get('name', prop)} "
+                f"({prop})"
+            ),
+            help=(
+                "At least two are required. PCA reduces these to 2D for "
+                "plotting; t-SNE embeds them directly in 2D; the selected "
+                "clustering algorithm is fitted independently on each 2D "
+                "projection, not on these raw properties."
+            ),
+            key=properties_key,
+        )
+
+        st.caption(
+            f"**{len(selected_properties)}** properties/features selected "
+            f"for this analysis."
+        )
+
+    ellipse_help = None if is_gmm else "Gaussian ellipses are only available for GMM."
 
     # ============================================================
     # PCA / t-SNE SIDE BY SIDE
@@ -762,31 +1057,10 @@ with tab_chemical_analysis:
     )
 
         # -------------------------------------------------------
-        # PCA analysis controls
+        # PCA visualization controls
         # -------------------------------------------------------
 
         with st.expander("PCA controls", expanded=False):
-
-            st.caption("Analysis controls")
-
-            pca_gmm_components_widget = st.slider(
-                "GMM components",
-                min_value=GMM_COMPONENT_MIN,
-                max_value=GMM_COMPONENT_MAX,
-                value=DEFAULT_GMM_COMPONENTS,
-                step=1,
-                key=pca_gmm_key,
-                help=(
-                    "Clusters a SEPARATE Gaussian Mixture Model fits "
-                    "directly on the 2D PCA coordinates -- independent of "
-                    "the t-SNE GMM, and independent of the number of "
-                    "properties/features selected above."
-                ),
-            )
-
-            # -------------------------------------------------------
-            # PCA visualization controls
-            # -------------------------------------------------------
 
             st.caption("Visualization controls")
 
@@ -803,7 +1077,7 @@ with tab_chemical_analysis:
                     key="pca_color_by_" + dataset_id,
                 )
 
-                pca_show_ellipses = st.checkbox( "Show Gaussian ellipses", value=False, key="pca_show_ellipses", )
+                pca_show_ellipses = st.checkbox( "Show Gaussian ellipses", value=False, key="pca_show_ellipses", disabled=not is_gmm, help=ellipse_help, )
 
                 pca_show_centers = st.checkbox( "Show cluster centers", value=False, key="pca_show_centers", )
 
@@ -815,9 +1089,10 @@ with tab_chemical_analysis:
                     format_func=lambda x: f"{x}%",
                     index=ELLIPSE_CONFIDENCE_OPTIONS.index( DEFAULT_ELLIPSE_CONFIDENCE_PCT ),
                     key="pca_ellipse_confidence",
+                    disabled=not is_gmm,
                 )
 
-                pca_ellipse_opacity = st.slider( "Ellipse fill opacity", min_value=0.0, max_value=0.6, value=0.16, step=0.02, key="pca_ellipse_opacity", )
+                pca_ellipse_opacity = st.slider( "Ellipse fill opacity", min_value=0.0, max_value=0.6, value=0.16, step=0.02, key="pca_ellipse_opacity", disabled=not is_gmm, )
 
                 pca_point_size = st.slider( "Point size", min_value=3, max_value=12, value=DEFAULT_POINT_SIZE, step=1, key="pca_point_size", )
 
@@ -825,7 +1100,7 @@ with tab_chemical_analysis:
         # PCA plot
         # -------------------------------------------------------
 
-        pca_cluster_order = [ str(c) for c in range(pca_gmm_components) ]
+        pca_cluster_order = [ str(c) for c in range(n_clusters) ]
 
         pca_plot_df = analysis_data.copy()
         pca_plot_df["PC1"] = X_pca[:, 0]
@@ -837,9 +1112,7 @@ with tab_chemical_analysis:
             y_col="PC2",
             x_title=f"PC1 ({pca_explained_variance[0] * 100:.1f}%)",
             y_title=f"PC2 ({pca_explained_variance[1] * 100:.1f}%)",
-            gmm_model=pca_gmm_model,
-            gmm_labels=pca_gmm_labels,
-            gmm_max_probability=pca_gmm_max_probability,
+            clustering=pca_clustering,
             color_by=pca_color_by,
             color_options=pca_color_options,
             show_ellipses=pca_show_ellipses,
@@ -855,15 +1128,7 @@ with tab_chemical_analysis:
         # PCA cluster summary
         # -------------------------------------------------------
 
-        st.caption("PCA GMM clusters")
-
-        pca_cluster_summary = ( pd.Series(pca_gmm_labels, name="Cluster") .value_counts() .sort_index() .rename("Molecules") .reset_index() )
-
-        pca_cluster_summary["Fraction"] = ( pca_cluster_summary["Molecules"] / len(pca_gmm_labels) ).map(lambda x: f"{x:.1%}")
-
-        pca_cluster_summary["Cluster"] = ( "PCA " + pca_cluster_summary["Cluster"].astype(str) )
-
-        st.dataframe( pca_cluster_summary, width='stretch', hide_index=True, )
+        render_cluster_summary( pca_clustering, "PCA", )
 
         # -------------------------------------------------------
         # PCA diagnostics
@@ -898,61 +1163,10 @@ with tab_chemical_analysis:
             )
 
         # -------------------------------------------------------
-        # PCA GMM diagnostics
+        # PCA clustering diagnostics (GMM or K-Means)
         # -------------------------------------------------------
 
-        with st.expander("▼ GMM diagnostics (PCA space)"):
-
-            gmm_diag_col1, gmm_diag_col2 = ( st.columns(2) )
-
-            with gmm_diag_col1:
-                st.metric("Components", pca_gmm_components)
-
-                st.metric("AIC", f"{pca_gmm_aic:,.0f}")
-
-            with gmm_diag_col2:
-                st.metric("BIC", f"{pca_gmm_bic:,.0f}")
-
-                st.metric( "Silhouette", ( "—" if np.isnan(pca_gmm_silhouette) else f"{pca_gmm_silhouette:.3f}" ), )
-
-            st.caption(
-                "Converged: "
-                f"{'yes' if pca_gmm_model.converged_ else 'no'} "
-                f"in {pca_gmm_model.n_iter_} iterations."
-            )
-
-            st.markdown("**Cluster weights**")
-
-            pca_weights_df = pd.DataFrame( { "Cluster": [ f"PCA {i}" for i in range(pca_gmm_components) ], "Weight": pca_gmm_model.weights_, } )
-
-            st.dataframe( pca_weights_df, width='stretch', hide_index=True, )
-
-            st.markdown("**Model selection (2-10 components)**")
-
-            pca_component_range = tuple( range(GMM_COMPONENT_MIN, GMM_COMPONENT_MAX + 1) )
-
-            pca_selection_df = calculate_gmm_model_selection(
-                X_pca,
-                pca_component_range,
-                GMM_COVARIANCE_TYPE,
-                GMM_N_INIT,
-                DEFAULT_RANDOM_SEED,
-            )
-
-            def _highlight_selected(row, selected):
-
-                if row["Components"] == selected:
-
-                    return [ f"background-color: {COLORS.get('accent_bg', '#FFF3CD')}" ] * len(row)
-
-                return [""] * len(row)
-
-            st.dataframe( pca_selection_df.style.apply( _highlight_selected, selected=pca_gmm_components, axis=1, ), width='stretch', hide_index=True, )
-
-            st.caption(
-                "The highlighted row is the currently selected "
-                "\"Number of GMM components\" value above."
-            )
+        render_clustering_diagnostics( X_pca, pca_clustering, "PCA", ("PC1", "PC2"), )
 
     # ------------------------------------------------------------
     # t-SNE COLUMN
@@ -983,25 +1197,9 @@ with tab_chemical_analysis:
 
             st.caption("Analysis controls")
 
-            tsne_analysis_col1, tsne_analysis_col2, tsne_analysis_col3 = st.columns(3)
+            tsne_analysis_col1, tsne_analysis_col2 = st.columns(2)
 
             with tsne_analysis_col1:
-
-                tsne_gmm_components_widget = st.slider(
-                    "GMM components",
-                    min_value=GMM_COMPONENT_MIN,
-                    max_value=GMM_COMPONENT_MAX,
-                    value=DEFAULT_GMM_COMPONENTS,
-                    step=1,
-                    key=tsne_gmm_key,
-                    help=(
-                        "A SEPARATE Gaussian Mixture Model fitted directly "
-                        "on the 2D t-SNE coordinates -- independent of the "
-                        "PCA GMM."
-                    ),
-                )
-
-            with tsne_analysis_col2:
 
                 tsne_perplexity_widget = st.slider(
                     "Perplexity",
@@ -1016,7 +1214,7 @@ with tab_chemical_analysis:
                     ),
                 )
 
-            with tsne_analysis_col3:
+            with tsne_analysis_col2:
 
                 tsne_seed_widget = st.number_input(
                     "Random seed",
@@ -1041,7 +1239,7 @@ with tab_chemical_analysis:
 
                 tsne_color_by = st.selectbox( "Color by", options=tsne_color_options, format_func=color_label, key="tsne_color_by_" + dataset_id, )
 
-                tsne_show_ellipses = st.checkbox( "Show Gaussian ellipses", value=False, key="tsne_show_ellipses", )
+                tsne_show_ellipses = st.checkbox( "Show Gaussian ellipses", value=False, key="tsne_show_ellipses", disabled=not is_gmm, help=ellipse_help, )
 
                 tsne_show_centers = st.checkbox( "Show cluster centers", value=False, key="tsne_show_centers", )
 
@@ -1053,6 +1251,7 @@ with tab_chemical_analysis:
                     format_func=lambda x: f"{x}%",
                     index=ELLIPSE_CONFIDENCE_OPTIONS.index( DEFAULT_ELLIPSE_CONFIDENCE_PCT ),
                     key="tsne_ellipse_confidence",
+                    disabled=not is_gmm,
                 )
 
                 tsne_ellipse_opacity = st.slider(
@@ -1062,6 +1261,7 @@ with tab_chemical_analysis:
                     value=0.16,
                     step=0.02,
                     key="tsne_ellipse_opacity",
+                    disabled=not is_gmm,
                 )
 
                 tsne_point_size = st.slider(
@@ -1077,7 +1277,7 @@ with tab_chemical_analysis:
         # t-SNE plot
         # -------------------------------------------------------
 
-        tsne_cluster_order = [ str(c) for c in range(tsne_gmm_components) ]
+        tsne_cluster_order = [ str(c) for c in range(n_clusters) ]
 
         tsne_plot_df = analysis_data.copy()
         tsne_plot_df["TSNE1"] = X_tsne[:, 0]
@@ -1089,9 +1289,7 @@ with tab_chemical_analysis:
             y_col="TSNE2",
             x_title="t-SNE 1",
             y_title="t-SNE 2",
-            gmm_model=tsne_gmm_model,
-            gmm_labels=tsne_gmm_labels,
-            gmm_max_probability=tsne_gmm_max_probability,
+            clustering=tsne_clustering,
             color_by=tsne_color_by,
             color_options=tsne_color_options,
             show_ellipses=tsne_show_ellipses,
@@ -1107,21 +1305,7 @@ with tab_chemical_analysis:
         # t-SNE cluster summary
         # -------------------------------------------------------
 
-        st.caption("t-SNE GMM clusters")
-
-        tsne_cluster_summary = (
-            pd.Series(tsne_gmm_labels, name="Cluster")
-            .value_counts()
-            .sort_index()
-            .rename("Molecules")
-            .reset_index()
-        )
-
-        tsne_cluster_summary["Fraction"] = ( tsne_cluster_summary["Molecules"] / len(tsne_gmm_labels) ).map(lambda x: f"{x:.1%}")
-
-        tsne_cluster_summary["Cluster"] = ( "t-SNE " + tsne_cluster_summary["Cluster"].astype(str) )
-
-        st.dataframe( tsne_cluster_summary, width='stretch', hide_index=True, )
+        render_cluster_summary( tsne_clustering, "t-SNE", )
 
         # -------------------------------------------------------
         # t-SNE diagnostics
@@ -1151,44 +1335,10 @@ with tab_chemical_analysis:
             )
 
         # -------------------------------------------------------
-        # t-SNE GMM diagnostics
+        # t-SNE clustering diagnostics (GMM or K-Means)
         # -------------------------------------------------------
 
-        with st.expander("▼ GMM diagnostics (t-SNE space)"):
-
-            tsne_gmm_diag_col1, tsne_gmm_diag_col2 = ( st.columns(2) )
-
-            with tsne_gmm_diag_col1:
-                st.metric("Components", tsne_gmm_components)
-
-                st.metric("AIC", f"{tsne_gmm_aic:,.0f}")
-
-            with tsne_gmm_diag_col2:
-                st.metric("BIC", f"{tsne_gmm_bic:,.0f}")
-
-                st.metric( "Silhouette", ( "—" if np.isnan(tsne_gmm_silhouette) else f"{tsne_gmm_silhouette:.3f}" ), )
-
-            st.caption(
-                "Converged: "
-                f"{'yes' if tsne_gmm_model.converged_ else 'no'} "
-                f"in {tsne_gmm_model.n_iter_} iterations."
-            )
-
-            st.markdown("**Cluster weights**")
-
-            tsne_weights_df = pd.DataFrame( { "Cluster": [ f"t-SNE {i}" for i in range(tsne_gmm_components) ], "Weight": tsne_gmm_model.weights_, } )
-
-            st.dataframe( tsne_weights_df, width='stretch', hide_index=True, )
-
-            st.markdown("**Model selection (2-10 components)**")
-
-            tsne_component_range = tuple( range(GMM_COMPONENT_MIN, GMM_COMPONENT_MAX + 1) )
-
-            tsne_selection_df = calculate_gmm_model_selection( X_tsne, tsne_component_range, GMM_COVARIANCE_TYPE, GMM_N_INIT, DEFAULT_RANDOM_SEED, )
-
-            st.dataframe( tsne_selection_df.style.apply( _highlight_selected, selected=tsne_gmm_components, axis=1, ), width='stretch', hide_index=True, )
-
-            st.caption( "The highlighted row is the currently selected \"Number of GMM components\" value above." )
+        render_clustering_diagnostics( X_tsne, tsne_clustering, "t-SNE", ("t-SNE 1", "t-SNE 2"), )
 
     # ============================================================
     # PCA VS t-SNE COMPARISON
@@ -1196,21 +1346,48 @@ with tab_chemical_analysis:
 
     section_header("PCA vs t-SNE comparison")
 
+    def _comparison_values(clustering):
+
+        values = [ f"{len(analysis_data):,}", f"{len(selected_properties)}", "2", f"{n_clusters}", format_metric(clustering["silhouette"]), ]
+
+        if is_gmm:
+            return values + [ f"{clustering['aic']:,.0f}", f"{clustering['bic']:,.0f}", ]
+
+        return values + [ f"{clustering['inertia']:,.1f}", format_metric(clustering["calinski_harabasz"], ",.1f"), format_metric(clustering["davies_bouldin"]), ]
+
+    comparison_metrics = [ f"{scope_unit_label.capitalize()} analyzed", "Selected properties", "Projection dimensions", "GMM components" if is_gmm else "K-Means clusters", "Silhouette", ]
+
+    comparison_metrics += ( [ "AIC", "BIC", ] if is_gmm else [ "Inertia (WCSS)", "Calinski-Harabasz", "Davies-Bouldin", ] )
+
     comparison_table = pd.DataFrame(
         {
-            "Metric": [ f"{scope_unit_label.capitalize()} analyzed", "Selected properties", "Projection dimensions", "GMM components", "Silhouette", "AIC", "BIC", ],
-            "PCA": [ f"{len(analysis_data):,}", f"{len(selected_properties)}", "2", f"{pca_gmm_components}", ( "—" if np.isnan(pca_gmm_silhouette) else f"{pca_gmm_silhouette:.3f}" ), f"{pca_gmm_aic:,.0f}", f"{pca_gmm_bic:,.0f}", ],
-            "t-SNE": [ f"{len(analysis_data):,}", f"{len(selected_properties)}", "2", f"{tsne_gmm_components}", ( "—" if np.isnan(tsne_gmm_silhouette) else f"{tsne_gmm_silhouette:.3f}" ), f"{tsne_gmm_aic:,.0f}", f"{tsne_gmm_bic:,.0f}", ],
+            "Metric": comparison_metrics,
+            "PCA": _comparison_values(pca_clustering),
+            "t-SNE": _comparison_values(tsne_clustering),
         }
     )
 
     st.dataframe( comparison_table, width='stretch', hide_index=True, )
 
-    st.info(
-        "The PCA and t-SNE GMMs are fitted **independently**, each "
-        "directly on its own 2D projection -- \"PCA Cluster 0\" and "
-        "\"t-SNE Cluster 0\" are not the same grouping and should not "
-        "be compared as if they were the same cluster. Differences in "
-        "silhouette/AIC/BIC above reflect how the two projections "
-        "themselves separate the data, not a shared clustering."
-    )
+    if is_gmm:
+
+        st.info(
+            "The PCA and t-SNE GMMs are fitted **independently**, each "
+            "directly on its own 2D projection -- \"PCA Cluster 0\" and "
+            "\"t-SNE Cluster 0\" are not the same grouping and should not "
+            "be compared as if they were the same cluster. Differences in "
+            "silhouette/AIC/BIC above reflect how the two projections "
+            "themselves separate the data, not a shared clustering."
+        )
+
+    else:
+
+        st.info(
+            "The PCA and t-SNE K-Means models are fitted **independently**, "
+            "each directly on its own 2D projection -- \"PCA Cluster 0\" and "
+            "\"t-SNE Cluster 0\" are not the same grouping and should not "
+            "be compared as if they were the same cluster. Inertia and "
+            "Calinski-Harabasz depend on each projection's coordinate scale, "
+            "so compare them across cluster counts within one projection "
+            "rather than between PCA and t-SNE."
+        )

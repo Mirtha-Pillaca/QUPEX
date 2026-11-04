@@ -98,7 +98,23 @@ st.markdown(
 
 DEFAULT_QM7X_ZENODO_URL = "https://zenodo.org/records/22893015/files/qm7x-eq.hdf5?download=1"
 
+DEFAULT_QM9_HDF5_PATH = "data/qm9_half.hdf5"
+
+# Default QM9 dataset (built with qm9pack) is temporarily disabled.
+# Set to True to reactivate the checkbox and the qm9pack generation workflow.
+DEFAULT_QM9_ENABLED = False
+
 use_default_dataset = st.checkbox( "Use default QM7-X dataset from Zenodo", value=False, key="app_use_default_dataset", )
+
+if DEFAULT_QM9_ENABLED:
+
+    use_default_qm9 = st.checkbox( "Use default QM9 dataset (qm9pack)", value=False, key="app_use_default_qm9", disabled=use_default_dataset, ) and not use_default_dataset
+
+else:
+
+    use_default_qm9 = False
+
+    st.caption( "Default QM9 dataset temporarily unavailable. You can still upload your own QM9 file." )
 
 if use_default_dataset:
 
@@ -114,9 +130,29 @@ if use_default_dataset:
     if load_button:
         st.session_state[ "default_dataset_attempted" ] = True
 
+    st.session_state[ "default_qm9_attempted" ] = False
+
+elif use_default_qm9:
+
+    st.caption( "Loads the QM9 dataset from a local HDF5 file. If it does not exist yet, it is created once from qm9pack; an existing file is never overwritten." )
+
+    st.session_state[ "default_dataset_attempted" ] = False
+
+    source = "Local"
+
+    file_path = DEFAULT_QM9_HDF5_PATH
+
+    # Auto-load once per session
+    load_button = ( not st.session_state.get( "default_qm9_attempted", False, ) )
+
+    if load_button:
+        st.session_state[ "default_qm9_attempted" ] = True
+
 else:
 
     st.session_state[ "default_dataset_attempted" ] = False
+
+    st.session_state[ "default_qm9_attempted" ] = False
 
     source = st.segmented_control( "Data source", options=[ "Local", "Upload", "Zenodo", ], default="Local", key="app_dataset_source",  )
 
@@ -168,6 +204,13 @@ if load_button:
         # ====================================================
 
         if source == "Local":
+
+            if DEFAULT_QM9_ENABLED and use_default_qm9 and not Path( file_path ).exists():
+
+                from modules.build_qm9_hdf5 import ensure_default_qm9_hdf5
+
+                with st.spinner( "Creating QM9 HDF5 from qm9pack (first run only)..." ):
+                    ensure_default_qm9_hdf5( file_path )
 
             if not file_path.strip():
 
